@@ -35,9 +35,12 @@ line and the once-a-minute stats job.
 ## What to read
 
 - `main.go` — the host: builds `core.Deps` from adapters
-  (`core.NewAuth`, `core.NewPoints`, `core.NewScheduler`, …),
-  calls `core.New` (fails loud on any missing seam) then
-  `core.Boot` (plugin migrations → topo-sort → Provision → Start).
+  (`core.NewAuth`, `core.NewPoints`, …), uses loon's
+  batteries-included scheduler (`schedule.CoreScheduler` — job
+  registry, run loop, off-peak gating; `schedule.LogSink` mirrors
+  job logs to stdout), calls `core.New` (fails loud on any missing
+  seam) then `core.Boot` (plugin migrations → topo-sort →
+  Provision → Start).
 - `plugins/guestbook/plugin.go` — the plugin: registers itself in
   `init()`, wires everything through the `*core.Core` mediator, and
   never imports anything host-specific.

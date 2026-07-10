@@ -24,6 +24,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/ameNZB/loon/core"
+	"github.com/ameNZB/loon/schedule"
 
 	// Plugins register themselves Caddy-style at init time.
 	_ "github.com/ameNZB/loon-demo-site/plugins/guestbook"
@@ -121,13 +122,21 @@ func main() {
 	// row + balance update atomically; the demo keeps a map.
 	points := &demoPoints{balances: map[int64]int{}}
 
+	// The scheduler is loon's batteries-included one: jobs land in
+	// schedule.Default (a host admin page would render its
+	// GetAllSnapshots), and LogSink mirrors job log lines to stdout
+	// so the demo's once-a-minute stats job stays visible.
+	schedule.LogSink = func(jobName, line string) {
+		logger.Info("job", "name", jobName, "line", line)
+	}
+
 	c, err := core.New(core.Deps{
 		Process:   "all",
 		Users:     usersSvc,
 		Auth:      auth,
 		RBAC:      core.NewRBAC(),
 		Storage:   core.NewStorage(db),
-		Scheduler: core.NewScheduler(demoScheduler(logger)),
+		Scheduler: schedule.CoreScheduler(schedule.Default),
 		Router: core.NewRouter(core.RouterAdapter{
 			Engine:          engine,
 			AdminMiddleware: requireAtLeast(core.RoleAdmin),
@@ -223,45 +232,3 @@ func (p *demoPoints) adapter() core.PointsAdapter {
 		},
 	}
 }
-
-// demoScheduler is the minimal SchedulerService backing: jobs log
-// through slog, and RunLoop is a plain ticker honouring the boot
-// delay and root-context cancellation. A real host wires its job
-// registry (admin visibility, off-peak gating, manual triggers).
-func demoScheduler(logger *slog.Logger) core.SchedulerAdapter {
-	return core.SchedulerAdapter{
-		RegisterJobFn: func(name, desc string) core.Job {
-			return &demoJob{logger: logger.With("job", name)}
-		},
-		RunLoopFn: func(ctx context.Context, job core.Job, bootDelay, interval time.Duration, runFn func(context.Context)) {
-			go func() {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(bootDelay):
-				}
-				ticker := time.NewTicker(interval)
-				defer ticker.Stop()
-				for {
-					job.SetRunning()
-					runFn(ctx)
-					job.SetIdle(time.Now().Add(interval))
-					select {
-					case <-ctx.Done():
-						return
-					case <-ticker.C:
-					}
-				}
-			}()
-		},
-	}
-}
-
-type demoJob struct{ logger *slog.Logger }
-
-func (j *demoJob) SetRunning()          {}
-func (j *demoJob) SetIdle(time.Time)    {}
-func (j *demoJob) SetError(msg string)  { j.logger.Error(msg) }
-func (j *demoJob) Log(f string, a ...any) { j.logger.Info(fmt.Sprintf(f, a...)) }
-func (j *demoJob) MarkOffPeak() core.Job { return j }
-func (j *demoJob) SetTrigger(func())     {}
