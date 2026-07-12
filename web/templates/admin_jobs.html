@@ -1,0 +1,57 @@
+{{define "content"}}
+<div style="display:flex;gap:1rem;margin-bottom:1rem">
+    <a href="/admin/usenet" class="btn btn-sm btn-outline-secondary">Usenet setup</a>
+    <a href="/admin/jobs" class="btn btn-sm btn-outline-primary">Jobs</a>
+    <a href="/admin/plugins" class="btn btn-sm btn-outline-secondary">Plugins</a>
+</div>
+<h1 class="h3 mb-3">Jobs</h1>
+
+{{if .Services}}
+<h2 class="h5 mb-2">Services</h2>
+{{template "jobtable" .Services}}
+{{end}}
+
+<h2 class="h5 mb-2 mt-4">Jobs</h2>
+{{if .Jobs}}{{template "jobtable" .Jobs}}{{else}}<div class="empty">No jobs registered.</div>{{end}}
+{{end}}
+
+{{define "jobtable"}}
+<div class="table-responsive mb-3">
+    <table class="table table-dark table-striped table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Name</th><th>Status</th><th>Last run</th><th>Next run</th>
+                <th class="text-end">Runs</th><th class="text-end">Interval</th>
+                <th>Last activity</th><th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .}}
+            <tr>
+                <td><code>{{.Name}}</code><div class="text-muted small">{{.Description}}</div></td>
+                <td>{{if .Paused}}<span class="badge bg-warning text-dark">paused</span>{{else}}<span class="badge bg-secondary">{{.Status}}</span>{{end}}</td>
+                <td class="small">{{.LastRun}}</td>
+                <td class="small">{{.NextRun}}</td>
+                <td class="text-end">{{.Runs}}</td>
+                <td class="text-end">{{.Interval}}</td>
+                <td class="small text-muted">{{.Activity}}</td>
+                <td>
+                    {{if .Triggerable}}
+                    <form method="post" action="/admin/jobs/control" style="display:inline">
+                        <input type="hidden" name="name" value="{{.Name}}">
+                        <input type="hidden" name="action" value="trigger">
+                        <button class="btn btn-sm btn-outline-primary py-0" type="submit">Run</button>
+                    </form>
+                    {{end}}
+                    <form method="post" action="/admin/jobs/control" style="display:inline">
+                        <input type="hidden" name="name" value="{{.Name}}">
+                        <input type="hidden" name="action" value="{{if .Paused}}resume{{else}}pause{{end}}">
+                        <button class="btn btn-sm btn-outline-secondary py-0" type="submit">{{if .Paused}}Resume{{else}}Pause{{end}}</button>
+                    </form>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

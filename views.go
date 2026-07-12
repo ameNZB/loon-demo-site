@@ -41,6 +41,7 @@ type web struct {
 	// usenet plugin capabilities, looked up on the extension registry after Boot.
 	usenet      pluginapi.UsenetIndex
 	usenetAdmin pluginapi.UsenetAdmin
+	rt          *core.Runtime // plugin runtime, for the /admin/plugins page
 }
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
@@ -55,7 +56,7 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 		}
 	}
 	w := &web{users: users, byID: byID, passwords: passwords, secret: secret, log: log, tmpls: map[string]*template.Template{}}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}

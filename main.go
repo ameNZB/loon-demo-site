@@ -149,10 +149,13 @@ func main() {
 	// schedule.JobsAdminHandler renders the jobs/services table with manual
 	// run/pause controls. Both sit behind the same admin role gate the plugins
 	// use — log in as an admin (alice) in the browser to reach them.
+	// The demo renders its admin pages (plugins/jobs/usenet) in its own layout
+	// for a consistent look, using loon's data (rt.Plugins, schedule snapshots).
+	wsrv.rt = rt
 	admin := engine.Group("/admin", wsrv.requireAtLeast(core.RoleAdmin)...)
-	admin.GET("/plugins", core.AdminHandler(rt, c))
-	admin.GET("/jobs", schedule.JobsAdminHandler(schedule.Default))
-	admin.POST("/jobs/control", schedule.JobsControlHandler(schedule.Default))
+	admin.GET("/plugins", wsrv.adminPlugins)
+	admin.GET("/jobs", wsrv.adminJobs)
+	admin.POST("/jobs/control", wsrv.adminJobsControl)
 
 	// Wire the usenet plugin's capabilities into the pages — the plugin publishes
 	// them on the extension registry during Provision; look them up now Boot ran.
