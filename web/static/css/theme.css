@@ -88,6 +88,10 @@ label { display: block; margin-bottom: .35rem; color: var(--muted); font-size: .
 .group-list { columns: 3; column-gap: 1.5rem; }
 .group-list a { display: block; padding: .15rem 0; color: var(--info); break-inside: avoid; }
 
+/* home widgets (plugin site.widget cards) */
+.widget-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 320px)); gap: 1rem; margin-bottom: 1.25rem; }
+.widget-row .widget h2 { font-size: .95rem; color: var(--muted); margin-bottom: .5rem; }
+
 /* hero + empty states */
 .hero { padding: 2rem 0 1rem; }
 .hero h1 { font-size: 2rem; }

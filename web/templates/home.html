@@ -5,6 +5,17 @@
         <a href="/groups">groups</a> or <a href="/search">search</a> for a release.</p>
 </section>
 
+{{if .Widgets}}
+<div class="widget-row">
+    {{range .Widgets}}
+    <div class="card widget">
+        <h2>{{.Title}}</h2>
+        {{.Fragment}}
+    </div>
+    {{end}}
+</div>
+{{end}}
+
 <h2 class="h5 mb-3">Recent releases</h2>
 {{if .Recent}}
 <div class="table-responsive">

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 	"time"
@@ -30,15 +31,27 @@ type jobRow struct {
 }
 
 func (w *web) adminJobs(c *gin.Context) {
-	w.render(c, "admin_jobs.html", map[string]any{
-		"Title": "Jobs", "Groups": groupJobs(schedule.GetAllSnapshots()),
-	})
+	groups := groupJobs(schedule.GetAllSnapshots())
+	// Plugin overrides: a SlotJobsWidget whose Anchor matches a group name
+	// replaces that group's default table ("list the basics, allow a custom
+	// override"). Render errors fall back to the default.
+	for i := range groups {
+		if v, ok := w.jobsWidgets[groups[i].Name]; ok {
+			if frag, err := v.Render(c); err == nil {
+				groups[i].Override = frag
+			} else {
+				w.log.Error("jobs widget", "anchor", groups[i].Name, "err", err)
+			}
+		}
+	}
+	w.render(c, "admin_jobs.html", map[string]any{"Title": "Jobs", "Groups": groups})
 }
 
 type jobGroup struct {
-	Name    string
-	Jobs    []jobRow
-	Running int
+	Name     string
+	Jobs     []jobRow
+	Running  int
+	Override template.HTML // plugin-supplied card body (SlotJobsWidget)
 }
 
 // groupJobs buckets snapshots by the leading token of the job name, so

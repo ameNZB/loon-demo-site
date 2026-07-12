@@ -40,10 +40,16 @@ type web struct {
 
 	// usenet plugin read capability, looked up on the extension registry after
 	// Boot (the plugin's ADMIN surface is no longer consumed here — the plugin
-	// renders its own admin views through loon's AdminView seam).
-	usenet   pluginapi.UsenetIndex
-	rt       *core.Runtime // plugin runtime, for the /admin/plugins page
-	adminNav []navItem     // shared admin subnav: plugin views + host pages
+	// renders its own views through loon's view system).
+	usenet pluginapi.UsenetIndex
+	rt     *core.Runtime // plugin runtime, for the /admin/plugins page
+
+	// View-system lookup tables, filled by wireViews after Boot.
+	adminNav      []navItem            // admin subnav: Settings + plugin pages + host pages
+	settingsViews []core.View          // sections on /admin/settings
+	sitePages     []core.View          // public-facing pages at /p/<slug>
+	siteWidgets   []core.View          // cards on the home page
+	jobsWidgets   map[string]core.View // job-group name -> override widget
 }
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
@@ -77,7 +83,7 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 			return u, webauth.Meta{}, u != nil
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_view.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -112,6 +118,7 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 	data["User"] = u
 	data["Path"] = c.Request.URL.Path
 	data["AdminNav"] = w.adminNav
+	data["SiteNav"] = w.siteNav(c) // plugin site pages the viewer may open
 	t := w.tmpls[page]
 	if t == nil {
 		c.String(http.StatusInternalServerError, "unknown page %q", page)
@@ -124,7 +131,7 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 }
 
 func (w *web) home(c *gin.Context) {
-	data := map[string]any{"Title": "Home"}
+	data := map[string]any{"Title": "Home", "Widgets": w.homeWidgets(c)}
 	if w.usenet != nil {
 		if res, err := w.usenet.Browse(c.Request.Context(), "", 25); err == nil {
 			data["Recent"] = toSearchRows(res)

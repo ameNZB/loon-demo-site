@@ -1,0 +1,14 @@
+{{define "content"}}
+{{template "admin-subnav" .}}
+<h1 class="h3 mb-3">Settings</h1>
+<p class="text-muted small mb-4">Each installed plugin contributes its own section.</p>
+
+{{range .Sections}}
+<section id="s-{{.Slug}}">
+    <h2 class="h5" style="margin:1.5rem 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">{{.Title}}</h2>
+    {{.Fragment}}
+</section>
+{{else}}
+<div class="empty">No plugin has registered settings.</div>
+{{end}}
+{{end}}

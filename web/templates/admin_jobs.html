@@ -11,7 +11,7 @@
         {{if .Running}}<span class="badge bg-secondary" style="margin-left:auto">{{.Running}} running</span>{{end}}
     </summary>
     <div class="job-group-body">
-        {{template "jobtable" .Jobs}}
+        {{if .Override}}{{.Override}}{{else}}{{template "jobtable" .Jobs}}{{end}}
     </div>
 </details>
 {{end}}
