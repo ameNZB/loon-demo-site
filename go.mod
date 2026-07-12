@@ -8,8 +8,11 @@ replace github.com/ameNZB/loon => ../loon
 
 replace github.com/ameNZB/loon-plugins => ../loon-plugins
 
+replace github.com/ameNZB/loon-baseline => ../loon-baseline
+
 require (
 	github.com/ameNZB/loon v0.0.0-00010101000000-000000000000
+	github.com/ameNZB/loon-baseline v0.0.0-00010101000000-000000000000
 	github.com/ameNZB/loon-plugins v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.10.0
 	github.com/jmoiron/sqlx v1.3.5

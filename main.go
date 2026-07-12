@@ -68,13 +68,8 @@ func main() {
 	wsrv := newWeb(users, sessionSecret, logger)
 	wsrv.mount(engine)
 
-	auth := core.NewAuth(core.AuthAdapter{
-		OptionalFn:     func() gin.HandlersChain { return gin.HandlersChain{} },
-		AuthenticateFn: func() gin.HandlersChain { return gin.HandlersChain{} }, // public mode
-		RequireUserFn:  wsrv.requireAtLeast,
-		RequireRoleFn:  wsrv.requireRole,
-		CurrentUserFn:  wsrv.currentUser,
-	})
+	// Hand loon the session policy through the baseline's core.Auth adapter.
+	auth := wsrv.auth.CoreAuth()
 	usersSvc := core.NewUsers(wsrv.usersAdapter())
 
 	// --- In-memory points ledger. A real host writes the ledger
@@ -98,7 +93,7 @@ func main() {
 		Scheduler: schedule.CoreScheduler(schedule.Default),
 		Router: core.NewRouter(core.RouterAdapter{
 			Engine:          engine,
-			AdminMiddleware: wsrv.requireAtLeast(core.RoleAdmin),
+			AdminMiddleware: wsrv.auth.Require(core.RoleAdmin),
 		}),
 		Logger: logger,
 		Config: core.NewConfig(map[string]any{
@@ -152,7 +147,7 @@ func main() {
 	// The demo renders its admin pages (plugins/jobs/usenet) in its own layout
 	// for a consistent look, using loon's data (rt.Plugins, schedule snapshots).
 	wsrv.rt = rt
-	admin := engine.Group("/admin", wsrv.requireAtLeast(core.RoleAdmin)...)
+	admin := engine.Group("/admin", wsrv.auth.Require(core.RoleAdmin)...)
 	admin.GET("/plugins", wsrv.adminPlugins)
 	admin.GET("/jobs", wsrv.adminJobs)
 	admin.POST("/jobs/control", wsrv.adminJobsControl)

@@ -2,21 +2,20 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"embed"
-	"encoding/base64"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ameNZB/loon/core"
+
+	"github.com/ameNZB/loon-baseline/password"
+	"github.com/ameNZB/loon-baseline/session"
+	"github.com/ameNZB/loon-baseline/webauth"
 
 	"github.com/ameNZB/loon-plugins/pluginapi"
 )
@@ -25,16 +24,17 @@ import (
 var webFS embed.FS
 
 // web is the demo's host-side HTTP surface: templates, static assets,
-// username+password login over a signed session cookie, and the public pages. A
-// real host backs this with its session store + a users table + hashed
-// passwords; the demo keeps two in-memory users whose password is bcrypt-
-// verified — the same login path a real site uses, just with trivial creds
-// (each account's password equals its username).
+// username+password login, and the public pages. The auth plumbing (signed
+// session cookie, bcrypt verify, current-user middleware) comes from
+// loon-baseline — the shared host baseline loon omits by design — so the demo
+// exercises the same code a real site would. It keeps two in-memory users whose
+// password equals their username.
 type web struct {
 	users     map[string]*core.User // by username
 	byID      map[int64]*core.User
 	passwords map[string]string // username -> bcrypt hash (demo: hash of the username)
-	secret    []byte
+	hasher    password.Hasher
+	auth      webauth.Auth
 	log       *slog.Logger
 	tmpls     map[string]*template.Template // page name -> parsed (base + page)
 
@@ -46,16 +46,32 @@ type web struct {
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 	byID := make(map[int64]*core.User, len(users))
-	passwords := make(map[string]string, len(users))
+	w := &web{
+		users:     users,
+		byID:      byID,
+		passwords: make(map[string]string, len(users)),
+		hasher:    password.Hasher{}, // bare bcrypt for the demo (no pepper)
+		log:       log,
+		tmpls:     map[string]*template.Template{},
+	}
 	for name, u := range users {
 		byID[u.ID] = u
 		// Demo password == username, stored bcrypt-hashed so login exercises a
 		// real hash-verify (not a plaintext compare).
-		if h, err := bcrypt.GenerateFromPassword([]byte(name), bcrypt.DefaultCost); err == nil {
-			passwords[name] = string(h)
+		if h, err := w.hasher.Hash(name); err == nil {
+			w.passwords[name] = h
 		}
 	}
-	w := &web{users: users, byID: byID, passwords: passwords, secret: secret, log: log, tmpls: map[string]*template.Template{}}
+	// Session cookie + current-user middleware from the baseline. epoch is 0 (the
+	// demo has no password-change invalidation); a real host returns the user's
+	// password_changed_at here so changing it logs every session out.
+	w.auth = webauth.Auth{
+		Session: session.Manager{Secret: secret}, // 7-day default; Secure off (plain-HTTP demo)
+		Resolve: func(_ context.Context, id int64) (*core.User, int64, bool) {
+			u := byID[id]
+			return u, 0, u != nil
+		},
+	}
 	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_crawlers.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
@@ -63,80 +79,10 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 	return w
 }
 
-// ── cookie session: an HMAC-signed user id ──────────────────────────
-
-const sessionCookie = "loon_session"
-
-func (w *web) sign(uid int64) string {
-	payload := strconv.FormatInt(uid, 10)
-	mac := hmac.New(sha256.New, w.secret)
-	mac.Write([]byte(payload))
-	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
-
-func (w *web) verify(v string) (int64, bool) {
-	payload, sig, ok := strings.Cut(v, ".")
-	if !ok {
-		return 0, false
-	}
-	mac := hmac.New(sha256.New, w.secret)
-	mac.Write([]byte(payload))
-	want := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(want), []byte(sig)) {
-		return 0, false
-	}
-	uid, err := strconv.ParseInt(payload, 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return uid, true
-}
-
-// currentUser resolves the request's user from the signed session cookie set at
-// login. The login form is the only way in — no header back door.
+// currentUser resolves the request's user via the baseline session middleware.
+// The login form is the only way in — no header back door.
 func (w *web) currentUser(c *gin.Context) (*core.User, bool) {
-	if ck, err := c.Cookie(sessionCookie); err == nil && ck != "" {
-		if uid, ok := w.verify(ck); ok {
-			if u := w.byID[uid]; u != nil {
-				return u, true
-			}
-		}
-	}
-	return nil, false
-}
-
-// requireAtLeast gates a route on a minimum role. Unauthenticated browser
-// requests are redirected to /login; API/curl requests get a 401.
-func (w *web) requireAtLeast(min core.Role) gin.HandlersChain {
-	return gin.HandlersChain{func(c *gin.Context) {
-		u, ok := w.currentUser(c)
-		if !ok {
-			if strings.Contains(c.GetHeader("Accept"), "text/html") {
-				c.Redirect(http.StatusSeeOther, "/login")
-				c.Abort()
-				return
-			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized,
-				gin.H{"ok": false, "error": "log in first"})
-			return
-		}
-		if u.Role < min {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"ok": false, "error": "insufficient role"})
-			return
-		}
-		c.Next()
-	}}
-}
-
-// requireRole is the exact-role variant used by core.AuthAdapter.RequireRoleFn.
-func (w *web) requireRole(role core.Role) gin.HandlersChain {
-	return gin.HandlersChain{func(c *gin.Context) {
-		if u, ok := w.currentUser(c); !ok || u.Role != role {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"ok": false, "error": "wrong role"})
-			return
-		}
-		c.Next()
-	}}
+	return w.auth.Current(c)
 }
 
 // ── routes + rendering ──────────────────────────────────────────────
@@ -219,18 +165,17 @@ func (w *web) loginPost(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("username"))
 	pass := c.PostForm("password")
 	u, ok := w.users[name]
-	if !ok || bcrypt.CompareHashAndPassword([]byte(w.passwords[name]), []byte(pass)) != nil {
+	if valid, _ := w.hasher.Verify(w.passwords[name], pass); !ok || !valid {
 		c.Status(http.StatusUnauthorized)
 		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
 		return
 	}
-	// 7-day cookie, HttpOnly. Secure=false because the demo runs on plain HTTP.
-	c.SetCookie(sessionCookie, w.sign(u.ID), 7*24*3600, "/", "", false, true)
+	w.auth.Session.Issue(c, u.ID, 0) // epoch 0: no password-change invalidation in the demo
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (w *web) logout(c *gin.Context) {
-	c.SetCookie(sessionCookie, "", -1, "/", "", false, true)
+	w.auth.Session.Clear(c)
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
