@@ -1,0 +1,13 @@
+/* Not real Bootstrap — a tiny reset + base so the loon admin pages (which link
+   this filename) and the demo pages share a foundation. The component/utility
+   classes live in theme.css, which loads after this and after tokens.css. */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; }
+img, svg { vertical-align: middle; max-width: 100%; }
+a { color: inherit; }
+table { border-collapse: collapse; }
+h1, h2, h3, h4, h5, h6 { margin: 0 0 .5rem; font-weight: 600; line-height: 1.2; }
+p { margin: 0 0 1rem; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+button { font-family: inherit; }

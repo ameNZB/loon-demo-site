@@ -2,12 +2,15 @@ module github.com/ameNZB/loon-demo-site
 
 go 1.26.4
 
-// loon is developed as a sibling checkout; when it publishes with
-// tagged releases this replace drops for a normal require.
+// loon + loon-plugins are developed as sibling checkouts; when they publish
+// with tagged releases these replaces drop for normal requires.
 replace github.com/ameNZB/loon => ../loon
+
+replace github.com/ameNZB/loon-plugins => ../loon-plugins
 
 require (
 	github.com/ameNZB/loon v0.0.0-00010101000000-000000000000
+	github.com/ameNZB/loon-plugins v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.10.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.9

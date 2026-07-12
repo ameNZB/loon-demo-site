@@ -1,0 +1,20 @@
+{{define "content"}}
+<section class="hero">
+    <h1>Latest from Usenet</h1>
+    <p>A basic indexer keeping roughly the last few days of posts. Browse the
+        <a href="/groups">groups</a> or <a href="/search">search</a> for a release.</p>
+</section>
+
+<h2 class="h5 mb-3">News</h2>
+{{if .News}}
+    {{range .News}}
+    <div class="card">
+        <h2>{{.Title}}</h2>
+        <div class="text-muted small mb-2">{{.Date}}</div>
+        <p>{{.Body}}</p>
+    </div>
+    {{end}}
+{{else}}
+<div class="empty">No news yet. Once the <code>news</code> plugin is wired, posts land here.</div>
+{{end}}
+{{end}}

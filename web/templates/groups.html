@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1 class="h3 mb-3">Newsgroups</h1>
+<p class="text-muted mb-4">
+    All groups this indexer watches.
+    {{if .Groups}}{{len .Groups}} active.{{else}}The crawler isn't set up yet.{{end}}
+</p>
+{{if .Groups}}
+<div class="group-list">
+    {{range .Groups}}<a href="/search?q={{.Name}}">{{.Name}} <span class="text-muted small">({{.NZBs}})</span></a>{{end}}
+</div>
+{{else}}
+<div class="empty">
+    No active groups yet. An admin adds a Usenet server and picks groups from
+    <a href="/admin/usenet">Setup</a>, then the crawler fills this in.
+</div>
+{{end}}
+{{end}}

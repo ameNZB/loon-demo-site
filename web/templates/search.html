@@ -1,0 +1,33 @@
+{{define "content"}}
+<h1 class="h3 mb-3">Search</h1>
+<form class="search-box" method="get" action="/search">
+    <input type="search" name="q" placeholder="Search titles…" value="{{.Query}}" autofocus>
+    <button class="btn btn-primary" type="submit">Search</button>
+</form>
+{{if .Query}}
+    {{if .Results}}
+    <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm align-middle">
+            <thead><tr><th>Title</th><th class="text-end">Size</th><th>Posted</th><th></th></tr></thead>
+            <tbody>
+            {{range .Results}}
+                <tr>
+                    <td>{{.Title}}{{range .Tags}} <span class="badge bg-secondary">{{.}}</span>{{end}}</td>
+                    <td class="text-end">{{.Size}}</td>
+                    <td class="small">{{.Posted}}</td>
+                    <td><a class="btn btn-sm btn-outline-primary py-0" href="/nzb/{{.ID}}">NZB</a></td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="empty">
+        No results for “{{.Query}}”.
+        {{if not .Configured}}The crawler isn't set up yet — nothing has been indexed.{{end}}
+    </div>
+    {{end}}
+{{else}}
+<div class="empty">Enter a title above. This indexer searches the last few days of posts.</div>
+{{end}}
+{{end}}

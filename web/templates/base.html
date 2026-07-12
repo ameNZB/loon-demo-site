@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{if .Title}}{{.Title}} — {{end}}loon demo indexer</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/tokens.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+    <header class="nav-bar">
+        <div class="inner">
+            <a class="brand" href="/">loon<span>indexer</span></a>
+            <nav>
+                <a href="/" {{if eq .Path "/"}}class="active"{{end}}>News</a>
+                <a href="/search" {{if eq .Path "/search"}}class="active"{{end}}>Search</a>
+                <a href="/groups" {{if eq .Path "/groups"}}class="active"{{end}}>Groups</a>
+                {{if .User}}<a href="/admin/usenet">Setup</a> <a href="/admin/jobs">Jobs</a>{{end}}
+            </nav>
+            <div class="user">
+                {{if .User}}{{.User.Username}} · <a href="/logout">log out</a>
+                {{else}}<a href="/login">log in</a>{{end}}
+            </div>
+        </div>
+    </header>
+    <main class="container page py-4">
+        {{template "content" .}}
+    </main>
+    <footer class="site-footer">
+        Built on <a href="https://github.com/ameNZB/loon">loon</a> — a demo indexer keeping the last few days of Usenet.
+    </footer>
+</body>
+</html>

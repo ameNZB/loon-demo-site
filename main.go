@@ -11,10 +11,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -23,10 +25,18 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
+	"github.com/ameNZB/loon/catalog"
 	"github.com/ameNZB/loon/core"
 	"github.com/ameNZB/loon/schedule"
 
-	// Plugins register themselves Caddy-style at init time.
+	// Plugins register themselves Caddy-style at init time. The loon-plugins
+	// ones are named imports because the host injects their deps via SetDeps.
+	"github.com/ameNZB/loon-plugins/backups"
+	"github.com/ameNZB/loon-plugins/pluginapi"
+	"github.com/ameNZB/loon-plugins/scraper"
+	"github.com/ameNZB/loon-plugins/stats"
+	_ "github.com/ameNZB/loon-plugins/usenet"
+
 	_ "github.com/ameNZB/loon-demo-site/plugins/guestbook"
 )
 
@@ -45,78 +55,27 @@ func main() {
 
 	engine := gin.Default()
 
-	// --- Demo users + auth. A real host wires its session
-	// middleware here; the demo authenticates via the X-Demo-User
-	// header so curl can exercise the role gates.
+	// --- Demo users + cookie-session auth. A real host wires its session
+	// store + users table here; the demo signs an HMAC cookie over two
+	// in-memory users (and still honours the X-Demo-User header for curl).
+	// The web struct (views.go) owns the templates, static assets, session
+	// cookie, and the public home/search/groups/login pages.
+	sessionSecret := []byte(getenvDefault("LOON_DEMO_SESSION_SECRET", "dev-insecure-demo-secret-change-me"))
 	users := map[string]*core.User{
 		"alice": {ID: 1, Username: "alice", Role: core.RoleAdmin, CreatedAt: time.Now()},
 		"bob":   {ID: 2, Username: "bob", Role: core.RoleUser, CreatedAt: time.Now()},
 	}
-	currentUser := func(c *gin.Context) (*core.User, bool) {
-		u, ok := users[c.GetHeader("X-Demo-User")]
-		return u, ok
-	}
-	requireAtLeast := func(min core.Role) gin.HandlersChain {
-		return gin.HandlersChain{func(c *gin.Context) {
-			u, ok := currentUser(c)
-			if !ok {
-				c.AbortWithStatusJSON(http.StatusUnauthorized,
-					gin.H{"ok": false, "error": "set the X-Demo-User header to alice or bob"})
-				return
-			}
-			if u.Role < min {
-				c.AbortWithStatusJSON(http.StatusForbidden,
-					gin.H{"ok": false, "error": "insufficient role"})
-				return
-			}
-			c.Next()
-		}}
-	}
+	wsrv := newWeb(users, sessionSecret, logger)
+	wsrv.mount(engine)
+
 	auth := core.NewAuth(core.AuthAdapter{
 		OptionalFn:     func() gin.HandlersChain { return gin.HandlersChain{} },
 		AuthenticateFn: func() gin.HandlersChain { return gin.HandlersChain{} }, // public mode
-		RequireUserFn:  requireAtLeast,
-		RequireRoleFn: func(role core.Role) gin.HandlersChain {
-			return gin.HandlersChain{func(c *gin.Context) {
-				if u, ok := currentUser(c); !ok || u.Role != role {
-					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"ok": false, "error": "wrong role"})
-					return
-				}
-				c.Next()
-			}}
-		},
-		CurrentUserFn: currentUser,
+		RequireUserFn:  wsrv.requireAtLeast,
+		RequireRoleFn:  wsrv.requireRole,
+		CurrentUserFn:  wsrv.currentUser,
 	})
-
-	byID := func(id int64) *core.User {
-		for _, u := range users {
-			if u.ID == id {
-				return u
-			}
-		}
-		return nil
-	}
-	usersSvc := core.NewUsers(core.UsersAdapter{
-		GetByIDFn: func(_ context.Context, id int64) (*core.User, error) { return byID(id), nil },
-		GetByUsernameFn: func(_ context.Context, name string) (*core.User, error) {
-			return users[name], nil
-		},
-		DisplayNameFn: func(_ context.Context, id int64) (string, error) {
-			if u := byID(id); u != nil {
-				return u.Username, nil
-			}
-			return "", nil
-		},
-		BulkDisplayNamesFn: func(_ context.Context, ids []int64) (map[int64]string, error) {
-			out := make(map[int64]string, len(ids))
-			for _, id := range ids {
-				if u := byID(id); u != nil {
-					out[id] = u.Username
-				}
-			}
-			return out, nil
-		},
-	})
+	usersSvc := core.NewUsers(wsrv.usersAdapter())
 
 	// --- In-memory points ledger. A real host writes the ledger
 	// row + balance update atomically; the demo keeps a map.
@@ -139,7 +98,7 @@ func main() {
 		Scheduler: schedule.CoreScheduler(schedule.Default),
 		Router: core.NewRouter(core.RouterAdapter{
 			Engine:          engine,
-			AdminMiddleware: requireAtLeast(core.RoleAdmin),
+			AdminMiddleware: wsrv.requireAtLeast(core.RoleAdmin),
 		}),
 		Logger: logger,
 		Config: core.NewConfig(map[string]any{
@@ -160,6 +119,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// --- loon-plugins wiring (all worker plugins; they boot under Process
+	// "all"). The scraper needs the shared catalog.Registry on the extension
+	// registry — empty here until a source module lands — plus a write sink;
+	// backups needs a place to put entries; stats needs a cache. The demo
+	// impls just log (or write to a temp dir), the way a real host would swap
+	// in its catalog_entry table / archive store / Redis cache.
+	if err := c.Register(catalog.RegistryExtension, catalog.NewRegistry()); err != nil {
+		logger.Error("register catalog registry", "err", err)
+		os.Exit(1)
+	}
+	scraper.SetDeps(scraper.Deps{Sink: catalogLogSink{log: logger}})
+	stats.SetDeps(stats.Deps{Cache: func(_ context.Context, s []pluginapi.Stat) error {
+		logger.Info("stats snapshot cached", "metrics", len(s))
+		return nil
+	}})
+	backups.SetDeps(backups.Deps{OpenEntry: demoBackupOpener(logger)})
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -169,6 +145,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	// --- Admin dashboard. core.AdminHandler renders the plugin manifest;
+	// schedule.JobsAdminHandler renders the jobs/services table with manual
+	// run/pause controls. Both sit behind the same admin role gate the plugins
+	// use. NOTE: browser access needs the X-Demo-User header (a demo limitation
+	// until real sessions land) — drive it with:
+	//   curl -H "X-Demo-User: alice" http://localhost:8090/admin/jobs
+	admin := engine.Group("/admin", wsrv.requireAtLeast(core.RoleAdmin)...)
+	admin.GET("/plugins", core.AdminHandler(rt, c))
+	admin.GET("/jobs", schedule.JobsAdminHandler(schedule.Default))
+	admin.POST("/jobs/control", schedule.JobsControlHandler(schedule.Default))
+
+	// Wire the usenet plugin's capabilities into the pages — the plugin publishes
+	// them on the extension registry during Provision; look them up now Boot ran.
+	if v, ok := c.Lookup(pluginapi.UsenetIndexName); ok {
+		wsrv.usenet, _ = v.(pluginapi.UsenetIndex)
+	}
+	if v, ok := c.Lookup(pluginapi.UsenetAdminName); ok {
+		wsrv.usenetAdmin, _ = v.(pluginapi.UsenetAdmin)
+	}
+	admin.GET("/usenet", wsrv.adminUsenet)
+	admin.POST("/usenet/server", wsrv.adminUsenetSaveServer)
+	admin.POST("/usenet/test", wsrv.adminUsenetTest)
+	admin.POST("/usenet/fetch-groups", wsrv.adminUsenetFetch)
+	admin.POST("/usenet/group", wsrv.adminUsenetGroup)
+	admin.POST("/usenet/crawl", wsrv.adminUsenetCrawl)
+
 	srv := &http.Server{Addr: ":8090", Handler: engine}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -176,7 +178,10 @@ func main() {
 			stop()
 		}
 	}()
-	logger.Info("loon demo site up", "addr", "http://localhost:8090/plugin/guestbook")
+	logger.Info("loon demo site up",
+		"guestbook", "http://localhost:8090/plugin/guestbook",
+		"admin_plugins", "http://localhost:8090/admin/plugins",
+		"admin_jobs", "http://localhost:8090/admin/jobs (needs header X-Demo-User: alice)")
 
 	<-ctx.Done()
 	shutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -195,6 +200,13 @@ func connect(dsn string) (*sqlx.DB, error) {
 		time.Sleep(2 * time.Second)
 	}
 	return nil, fmt.Errorf("after 10 attempts: %w", err)
+}
+
+func getenvDefault(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 // demoPoints is the in-memory PointsService backing. Deduct
@@ -230,5 +242,30 @@ func (p *demoPoints) adapter() core.PointsAdapter {
 		RefundFn: func(_ context.Context, userID int64, n int, _, _ string, _ int64) (int, error) {
 			return change(userID, n)
 		},
+	}
+}
+
+// catalogLogSink is the demo's pluginapi.CatalogSink: a real host writes each
+// scraped entry into its unified catalog_entry table; the demo just logs. It's
+// never called until a MetadataSource is registered (Phase 3), but the scraper
+// plugin still boots and appears on the jobs page with it wired.
+type catalogLogSink struct{ log *slog.Logger }
+
+func (s catalogLogSink) Upsert(_ context.Context, e catalog.CatalogEntry) error {
+	s.log.Info("catalog upsert", "kind", e.Ref.Kind, "id", e.Ref.ID, "title", e.Title)
+	return nil
+}
+
+// demoBackupOpener returns the backups plugin's OpenEntry seam, writing each
+// backup entry to a temp dir. A real host would stream into a tar/dated dir or
+// an object store.
+func demoBackupOpener(log *slog.Logger) func(context.Context, string) (io.WriteCloser, error) {
+	dir := filepath.Join(os.TempDir(), "loon-demo-backups")
+	return func(_ context.Context, name string) (io.WriteCloser, error) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+		log.Info("backup entry", "path", filepath.Join(dir, name))
+		return os.Create(filepath.Join(dir, name))
 	}
 }

@@ -1,0 +1,83 @@
+{{define "content"}}
+<div style="display:flex;gap:1rem;margin-bottom:1rem">
+    <a href="/admin/usenet" class="btn btn-sm btn-outline-primary">Usenet setup</a>
+    <a href="/admin/jobs" class="btn btn-sm btn-outline-secondary">Jobs</a>
+    <a href="/admin/plugins" class="btn btn-sm btn-outline-secondary">Plugins</a>
+</div>
+<h1 class="h3 mb-3">Usenet setup</h1>
+
+{{if .Unavailable}}
+<div class="alert alert-secondary">The usenet plugin isn't running in this process.</div>
+{{else}}
+{{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
+
+<div class="card">
+    <h2>NNTP server</h2>
+    <form method="post" action="/admin/usenet/server">
+        <label>Host</label>
+        <input type="text" name="host" value="{{.Server.Host}}" placeholder="news.example.com">
+        <div style="display:flex;gap:1rem;margin-top:.5rem">
+            <div style="flex:1"><label>Port</label>
+                <input type="text" name="port" value="{{if .Server.Port}}{{.Server.Port}}{{else}}119{{end}}"></div>
+            <div style="flex:2"><label>Username</label>
+                <input type="text" name="username" value="{{.Server.Username}}"></div>
+            <div style="flex:2"><label>Password</label>
+                <input type="password" name="password" value="{{.Server.Password}}"></div>
+        </div>
+        <label style="margin-top:.6rem"><input type="checkbox" name="tls" {{if .Server.TLS}}checked{{end}}> TLS (SSL)</label>
+        <div style="margin-top:.75rem;display:flex;gap:.5rem">
+            <button class="btn btn-primary" type="submit">Save</button>
+            <button class="btn btn-outline-secondary" type="submit" formaction="/admin/usenet/test">Test connection</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Newsgroups</h2>
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
+        <form method="post" action="/admin/usenet/fetch-groups">
+            <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
+        </form>
+        <form method="post" action="/admin/usenet/crawl">
+            <button class="btn btn-outline-primary btn-sm" type="submit">Crawl now</button>
+        </form>
+        <input type="search" id="gf" placeholder="filter groups…" style="max-width:260px" oninput="filterGroups()">
+    </div>
+    {{if .Groups}}
+    <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle" id="gtable">
+            <thead><tr><th>Group</th><th class="text-end">NZBs</th><th></th></tr></thead>
+            <tbody>
+            {{range .Groups}}
+                <tr>
+                    <td><code>{{.Name}}</code></td>
+                    <td class="text-end">{{.NZBs}}</td>
+                    <td>
+                        <form method="post" action="/admin/usenet/group" style="display:inline">
+                            <input type="hidden" name="name" value="{{.Name}}">
+                            <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
+                            <button class="btn btn-sm py-0 {{if .Active}}btn-primary{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}active{{else}}enable{{end}}</button>
+                        </form>
+                    </td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="text-muted small mt-3">Active groups are crawled. Showing up to 1000 (active first).</p>
+    {{else}}
+    <div class="empty">No groups yet. Save a server above, then <strong>Fetch group list</strong> to pull the server's newsgroups.</div>
+    {{end}}
+</div>
+{{end}}
+
+<script>
+function filterGroups() {
+    var q = document.getElementById('gf').value.toLowerCase();
+    document.querySelectorAll('#gtable tbody tr').forEach(function (r) {
+        r.style.display = r.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+    });
+}
+</script>
+{{end}}

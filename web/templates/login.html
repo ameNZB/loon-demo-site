@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="container page-narrow" style="padding-inline:0">
+    <h1 class="h3 mb-3">Log in</h1>
+    {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
+    <div class="card">
+        <form method="post" action="/login">
+            <label for="username">Username</label>
+            <input id="username" type="text" name="username" placeholder="alice or bob" autofocus>
+            <p class="text-muted small mt-3">
+                Demo login — no password. <code>alice</code> is an admin,
+                <code>bob</code> is a regular user.
+            </p>
+            <button class="btn btn-primary" type="submit">Log in</button>
+        </form>
+    </div>
+</div>
+{{end}}
