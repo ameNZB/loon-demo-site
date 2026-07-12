@@ -94,6 +94,16 @@ label { display: block; margin-bottom: .35rem; color: var(--muted); font-size: .
 .hero p { color: var(--muted); max-width: 60ch; }
 .empty { color: var(--muted); padding: 2rem; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); }
 
+/* collapsible job groups */
+details.job-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: .6rem; }
+details.job-group > summary { padding: .7rem 1rem; cursor: pointer; display: flex; align-items: center; gap: .5rem; list-style: none; }
+details.job-group > summary::-webkit-details-marker { display: none; }
+details.job-group > summary::before { content: "\25B8"; color: var(--muted); transition: transform .15s; }
+details.job-group[open] > summary { border-bottom: 1px solid var(--border); }
+details.job-group[open] > summary::before { transform: rotate(90deg); }
+.job-group-body { padding: .5rem 1rem; }
+.job-group-body .table-responsive { margin-bottom: 0; }
+
 @media (max-width: 800px) {
     .group-list { columns: 1; }
     .nav-bar nav { gap: .6rem; }

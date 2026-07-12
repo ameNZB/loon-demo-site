@@ -30,16 +30,45 @@ type jobRow struct {
 }
 
 func (w *web) adminJobs(c *gin.Context) {
-	var services, jobs []jobRow
-	for _, s := range schedule.GetAllSnapshots() {
-		row := toJobRow(s)
-		if s.Kind == "service" {
-			services = append(services, row)
-		} else {
-			jobs = append(jobs, row)
+	w.render(c, "admin_jobs.html", map[string]any{
+		"Title": "Jobs", "Groups": groupJobs(schedule.GetAllSnapshots()),
+	})
+}
+
+type jobGroup struct {
+	Name    string
+	Jobs    []jobRow
+	Running int
+}
+
+// groupJobs buckets snapshots by the leading token of the job name, so
+// "NZB Builder/Tag Fill/Prune" collapse under "NZB", "Backup" stands alone, etc.
+func groupJobs(snaps []schedule.JobSnapshot) []jobGroup {
+	idx := map[string]int{}
+	var groups []jobGroup
+	for _, s := range snaps {
+		g := jobGroupName(s.Name)
+		i, ok := idx[g]
+		if !ok {
+			i = len(groups)
+			idx[g] = i
+			groups = append(groups, jobGroup{Name: g})
+		}
+		groups[i].Jobs = append(groups[i].Jobs, toJobRow(s))
+		if s.Status == "running" || s.ElapsedSecs > 0 {
+			groups[i].Running++
 		}
 	}
-	w.render(c, "admin_jobs.html", map[string]any{"Title": "Jobs", "Services": services, "Jobs": jobs})
+	return groups
+}
+
+func jobGroupName(name string) string {
+	for i, r := range name {
+		if r == ' ' || r == ':' {
+			return name[:i]
+		}
+	}
+	return name
 }
 
 func toJobRow(s schedule.JobSnapshot) jobRow {

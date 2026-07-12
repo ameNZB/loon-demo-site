@@ -6,17 +6,26 @@
 </div>
 <h1 class="h3 mb-3">Jobs</h1>
 
-{{if .Services}}
-<h2 class="h5 mb-2">Services</h2>
-{{template "jobtable" .Services}}
+{{if .Groups}}
+{{range .Groups}}
+<details class="job-group"{{if .Running}} open{{end}}>
+    <summary>
+        <strong>{{.Name}}</strong>
+        <span class="text-muted small">· {{len .Jobs}} job{{if ne (len .Jobs) 1}}s{{end}}</span>
+        {{if .Running}}<span class="badge bg-secondary" style="margin-left:auto">{{.Running}} running</span>{{end}}
+    </summary>
+    <div class="job-group-body">
+        {{template "jobtable" .Jobs}}
+    </div>
+</details>
 {{end}}
-
-<h2 class="h5 mb-2 mt-4">Jobs</h2>
-{{if .Jobs}}{{template "jobtable" .Jobs}}{{else}}<div class="empty">No jobs registered.</div>{{end}}
+{{else}}
+<div class="empty">No jobs registered.</div>
+{{end}}
 {{end}}
 
 {{define "jobtable"}}
-<div class="table-responsive mb-3">
+<div class="table-responsive">
     <table class="table table-dark table-striped table-sm align-middle">
         <thead>
             <tr>
