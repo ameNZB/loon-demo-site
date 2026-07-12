@@ -38,19 +38,33 @@ func (w *web) nzbDownload(c *gin.Context) {
 // ── admin /admin/usenet wizard ──────────────────────────────────────
 
 func (w *web) adminUsenet(c *gin.Context) {
+	var srv pluginapi.Server
+	if w.usenetAdmin != nil {
+		srv, _ = w.usenetAdmin.Server(c.Request.Context())
+	}
+	w.renderUsenet(c, srv, c.Query("gq"), c.Query("msg"), c.Query("err"))
+}
+
+// renderUsenet renders the wizard for a given server (typed OR saved) plus the
+// group picker filtered by gq. Test calls this with the submitted values so the
+// form keeps its input instead of resetting.
+func (w *web) renderUsenet(c *gin.Context, srv pluginapi.Server, gq, msg, errMsg string) {
 	if w.usenetAdmin == nil {
 		w.render(c, "admin_usenet.html", map[string]any{"Title": "Usenet", "Unavailable": true})
 		return
 	}
 	ctx := c.Request.Context()
-	srv, _ := w.usenetAdmin.Server(ctx)
-	groups, _ := w.usenetAdmin.AllGroups(ctx, 1000)
+	groups, _ := w.usenetAdmin.AllGroups(ctx, gq, 300)
+	total, _ := w.usenetAdmin.GroupCount(ctx)
 	w.render(c, "admin_usenet.html", map[string]any{
-		"Title":  "Usenet",
-		"Server": srv,
-		"Groups": groups,
-		"Msg":    c.Query("msg"),
-		"Err":    c.Query("err"),
+		"Title":      "Usenet",
+		"Server":     srv,
+		"Groups":     groups,
+		"GroupQuery": gq,
+		"GroupTotal": total,
+		"Shown":      len(groups),
+		"Msg":        msg,
+		"Err":        errMsg,
 	})
 }
 
@@ -67,15 +81,18 @@ func (w *web) adminUsenetSaveServer(c *gin.Context) {
 }
 
 func (w *web) adminUsenetTest(c *gin.Context) {
+	srv := usenetFormServer(c)
 	if w.usenetAdmin == nil {
-		c.Redirect(http.StatusSeeOther, "/admin/usenet")
+		w.renderUsenet(c, srv, "", "", "")
 		return
 	}
-	if err := w.usenetAdmin.TestConnect(c.Request.Context(), usenetFormServer(c)); err != nil {
-		redirectMsg(c, "err", "connection failed: "+err.Error())
+	// Re-render with the submitted values (not a redirect) so the form keeps
+	// everything you typed, whatever the connection result.
+	if err := w.usenetAdmin.TestConnect(c.Request.Context(), srv); err != nil {
+		w.renderUsenet(c, srv, "", "", "connection failed: "+err.Error())
 		return
 	}
-	redirectMsg(c, "msg", "connection ok")
+	w.renderUsenet(c, srv, "", "connection ok — click Save to keep it", "")
 }
 
 func (w *web) adminUsenetFetch(c *gin.Context) {
@@ -96,7 +113,11 @@ func (w *web) adminUsenetGroup(c *gin.Context) {
 		_ = w.usenetAdmin.SetGroupActive(c.Request.Context(),
 			c.PostForm("name"), c.PostForm("active") == "true")
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/usenet")
+	dest := "/admin/usenet"
+	if gq := c.PostForm("gq"); gq != "" {
+		dest += "?gq=" + url.QueryEscape(gq) // keep the current group search
+	}
+	c.Redirect(http.StatusSeeOther, dest)
 }
 
 func (w *web) adminUsenetCrawl(c *gin.Context) {

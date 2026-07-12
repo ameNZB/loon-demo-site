@@ -25,7 +25,9 @@
             <div style="flex:2"><label>Password</label>
                 <input type="password" name="password" value="{{.Server.Password}}"></div>
         </div>
-        <label style="margin-top:.6rem"><input type="checkbox" name="tls" {{if .Server.TLS}}checked{{end}}> TLS (SSL)</label>
+        <label style="margin-top:.6rem">
+            <input type="checkbox" name="tls" {{if .Server.TLS}}checked{{end}}> TLS (SSL) — usually port <code>563</code>
+        </label>
         <div style="margin-top:.75rem;display:flex;gap:.5rem">
             <button class="btn btn-primary" type="submit">Save</button>
             <button class="btn btn-outline-secondary" type="submit" formaction="/admin/usenet/test">Test connection</button>
@@ -36,17 +38,20 @@
 <div class="card">
     <h2>Newsgroups</h2>
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
-        <form method="post" action="/admin/usenet/fetch-groups">
+        <form method="post" action="/admin/usenet/fetch-groups" style="display:inline">
             <button class="btn btn-outline-primary btn-sm" type="submit">Fetch group list</button>
         </form>
-        <form method="post" action="/admin/usenet/crawl">
+        <form method="post" action="/admin/usenet/crawl" style="display:inline">
             <button class="btn btn-outline-primary btn-sm" type="submit">Crawl now</button>
         </form>
-        <input type="search" id="gf" placeholder="filter groups…" style="max-width:260px" oninput="filterGroups()">
+        <form method="get" action="/admin/usenet" style="display:flex;gap:.5rem;flex:1;min-width:220px">
+            <input type="search" name="gq" value="{{.GroupQuery}}" placeholder="search groups…" style="flex:1">
+            <button class="btn btn-outline-secondary btn-sm" type="submit">Search</button>
+        </form>
     </div>
     {{if .Groups}}
     <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle" id="gtable">
+        <table class="table table-dark table-sm align-middle">
             <thead><tr><th>Group</th><th class="text-end">NZBs</th><th></th></tr></thead>
             <tbody>
             {{range .Groups}}
@@ -57,6 +62,7 @@
                         <form method="post" action="/admin/usenet/group" style="display:inline">
                             <input type="hidden" name="name" value="{{.Name}}">
                             <input type="hidden" name="active" value="{{if .Active}}false{{else}}true{{end}}">
+                            <input type="hidden" name="gq" value="{{$.GroupQuery}}">
                             <button class="btn btn-sm py-0 {{if .Active}}btn-primary{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Active}}active{{else}}enable{{end}}</button>
                         </form>
                     </td>
@@ -65,19 +71,16 @@
             </tbody>
         </table>
     </div>
-    <p class="text-muted small mt-3">Active groups are crawled. Showing up to 1000 (active first).</p>
+    <p class="text-muted small mt-3">
+        {{if .GroupQuery}}Showing up to {{.Shown}} matches for &ldquo;{{.GroupQuery}}&rdquo; ({{.GroupTotal}} groups fetched total).
+        {{else}}Showing {{.Shown}} of {{.GroupTotal}} groups (active first). Use search to find a specific group.{{end}}
+    </p>
     {{else}}
-    <div class="empty">No groups yet. Save a server above, then <strong>Fetch group list</strong> to pull the server's newsgroups.</div>
+    <div class="empty">
+        {{if .GroupQuery}}No groups match &ldquo;{{.GroupQuery}}&rdquo;.
+        {{else}}No groups yet. Save a server above, then <strong>Fetch group list</strong> to pull the server's newsgroups.{{end}}
+    </div>
     {{end}}
 </div>
 {{end}}
-
-<script>
-function filterGroups() {
-    var q = document.getElementById('gf').value.toLowerCase();
-    document.querySelectorAll('#gtable tbody tr').forEach(function (r) {
-        r.style.display = r.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
-    });
-}
-</script>
 {{end}}
