@@ -45,11 +45,12 @@ type web struct {
 	rt     *core.Runtime // plugin runtime, for the /admin/plugins page
 
 	// View-system lookup tables, filled by wireViews after Boot.
-	adminNav      []navItem            // admin subnav: Settings + plugin pages + host pages
-	settingsViews []core.View          // sections on /admin/settings
-	sitePages     []core.View          // public-facing pages at /p/<slug>
-	siteWidgets   []core.View          // cards on the home page
-	jobsWidgets   map[string]core.View // job-group name -> override widget
+	adminNav       []navItem            // admin subnav: Settings + plugin pages + host pages
+	settingsViews  []core.View          // sections on /admin/settings
+	sitePages      []core.View          // public-facing pages at /p/<slug>
+	siteWidgets    []core.View          // cards on the home page
+	jobsWidgets    map[string]core.View // job-group name -> override widget
+	siteNavEntries []siteNavEntry       // site pages, pre-sorted for the nav (built once at boot)
 }
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {

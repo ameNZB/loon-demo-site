@@ -16,7 +16,16 @@
                 <a href="/" {{if eq .Path "/"}}class="active"{{end}}>News</a>
                 <a href="/search" {{if eq .Path "/search"}}class="active"{{end}}>Search</a>
                 <a href="/groups" {{if eq .Path "/groups"}}class="active"{{end}}>Groups</a>
-                {{range .SiteNav}}<a href="{{.Href}}" {{if eq $.Path .Href}}class="active"{{end}}>{{.Label}}</a>{{end}}
+                {{range .SiteNav}}
+                    {{if .Children}}
+                    <details class="nav-dd">
+                        <summary>{{.Label}}</summary>
+                        <div class="nav-dd-menu">
+                            {{range .Children}}<a href="{{.Href}}" {{if eq $.Path .Href}}class="active"{{end}}>{{.Label}}</a>{{end}}
+                        </div>
+                    </details>
+                    {{else}}<a href="{{.Href}}" {{if eq $.Path .Href}}class="active"{{end}}>{{.Label}}</a>{{end}}
+                {{end}}
                 {{if .User}}<a href="/admin/settings">Settings</a> <a href="/admin/p/crawlers">Crawlers</a> <a href="/admin/jobs">Jobs</a>{{end}}
             </nav>
             <div class="user">

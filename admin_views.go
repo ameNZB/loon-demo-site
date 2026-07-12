@@ -3,6 +3,7 @@ package main
 import (
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +73,43 @@ func (w *web) wireViews(c *core.Core, engine *gin.Engine, admin *gin.RouterGroup
 			engine.POST("/p/"+v.Slug+"/"+name, w.siteAction(v, fn))
 		}
 	}
+
+	// Build the site-nav entry list ONCE, sorted by group then weight then
+	// registration order (a plugin's Nav hint suggests placement — the
+	// WordPress/Drupal pattern). Per request we only role-filter this, never
+	// re-sort. NavHidden views are mounted above but omitted from the nav.
+	w.siteNavEntries = w.siteNavEntries[:0]
+	for _, v := range w.sitePages {
+		if v.Nav.Menu == core.NavHidden {
+			continue
+		}
+		w.siteNavEntries = append(w.siteNavEntries, siteNavEntry{
+			href: "/p/" + v.Slug, label: v.Title,
+			group: v.Nav.Group, weight: v.Nav.Weight, view: v,
+		})
+	}
+	sort.SliceStable(w.siteNavEntries, func(i, j int) bool {
+		a, b := w.siteNavEntries[i], w.siteNavEntries[j]
+		if a.group != b.group {
+			return a.group < b.group // "" (ungrouped) sorts first
+		}
+		return a.weight < b.weight
+	})
+}
+
+// siteNavEntry is a site page pre-resolved for the nav (built at boot).
+type siteNavEntry struct {
+	href, label, group string
+	weight             int
+	view               core.View
+}
+
+// navNode is one rendered top-level nav item: a plain link (Children nil) or a
+// dropdown (Children set, Href "").
+type navNode struct {
+	Label    string
+	Href     string
+	Children []navItem
 }
 
 // canView applies a view's visibility to the current request.
@@ -80,15 +118,42 @@ func (w *web) canView(v core.View, c *gin.Context) bool {
 	return v.AllowsUser(u)
 }
 
-// siteNav lists the site pages the current viewer may open (for the top nav).
-func (w *web) siteNav(c *gin.Context) []navItem {
-	var nav []navItem
-	for _, v := range w.sitePages {
-		if w.canView(v, c) {
-			nav = append(nav, navItem{Href: "/p/" + v.Slug, Label: v.Title})
+// siteNav builds the top nav for the current viewer from the pre-sorted
+// entries: ungrouped pages become plain links; a named group with 2+ visible
+// pages collapses into a dropdown; a group with a single visible page flattens
+// to a plain link (no one-item dropdowns). The user is resolved ONCE and the
+// entries are already sorted, so this is a linear role-filter — nothing hot.
+func (w *web) siteNav(c *gin.Context) []navNode {
+	u, _ := w.auth.Current(c)
+	var nodes []navNode
+	for i := 0; i < len(w.siteNavEntries); {
+		e := w.siteNavEntries[i]
+		if e.group == "" {
+			if e.view.AllowsUser(u) {
+				nodes = append(nodes, navNode{Label: e.label, Href: e.href})
+			}
+			i++
+			continue
+		}
+		// entries are contiguous by group — gather the run, keep visible ones
+		var kids []navItem
+		for i < len(w.siteNavEntries) && w.siteNavEntries[i].group == e.group {
+			ge := w.siteNavEntries[i]
+			if ge.view.AllowsUser(u) {
+				kids = append(kids, navItem{Href: ge.href, Label: ge.label})
+			}
+			i++
+		}
+		switch len(kids) {
+		case 0:
+			// nothing visible in this group
+		case 1:
+			nodes = append(nodes, navNode{Label: kids[0].Label, Href: kids[0].Href})
+		default:
+			nodes = append(nodes, navNode{Label: e.group, Children: kids})
 		}
 	}
-	return nav
+	return nodes
 }
 
 // homeWidgets renders the site widgets the current viewer may see.

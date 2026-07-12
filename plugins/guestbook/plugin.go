@@ -64,6 +64,12 @@ func (p *Plugin) Provision(c *core.Core) error {
 	signed.Use(c.Auth.RequireUser(core.RoleUser)...)
 	signed.POST("", p.sign)
 
+	// The browsable guestbook page (views.go) — grouped under Community in
+	// the site nav next to the stats plugin's page.
+	if err := p.registerViews(c); err != nil {
+		return err
+	}
+
 	p.job = c.Scheduler.RegisterJob("guestbook: stats", "logs the entry count")
 	return nil
 }

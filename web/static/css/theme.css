@@ -41,6 +41,16 @@ code { color: #a5d6ff; background: rgba(110, 118, 129, .15); padding: .1em .35em
 .nav-bar nav a.active, .nav-bar nav a:hover { color: var(--text); text-decoration: none; }
 .nav-bar .user { color: var(--muted); font-size: .9rem; }
 
+/* nav dropdowns (plugin site pages grouped by NavHint) — native <details>, no JS */
+.nav-dd { position: relative; }
+.nav-dd > summary { list-style: none; cursor: pointer; color: var(--muted); padding: .25rem 0; }
+.nav-dd > summary::-webkit-details-marker { display: none; }
+.nav-dd > summary::after { content: "▾"; margin-left: .25rem; font-size: .8em; }
+.nav-dd > summary:hover, .nav-dd[open] > summary { color: var(--text); }
+.nav-dd-menu { position: absolute; top: 100%; left: 0; z-index: 30; margin-top: .35rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .35rem; min-width: 170px; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.nav-bar nav .nav-dd-menu a { display: block; color: var(--muted); padding: .35rem .55rem; border-radius: 4px; white-space: nowrap; }
+.nav-bar nav .nav-dd-menu a:hover, .nav-bar nav .nav-dd-menu a.active { color: var(--text); background: var(--surface-2); }
+
 /* footer */
 .site-footer { border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; padding: 1.5rem 1rem; text-align: center; margin-top: 2rem; }
 
