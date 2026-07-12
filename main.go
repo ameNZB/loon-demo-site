@@ -66,6 +66,9 @@ func main() {
 		"bob":   {ID: 2, Username: "bob", Role: core.RoleUser, CreatedAt: time.Now()},
 	}
 	wsrv := newWeb(users, sessionSecret, logger)
+	// gin-contrib session middleware (the prod scheme) must be installed before
+	// any route that logs in or reads the user.
+	engine.Use(wsrv.auth.Session.Middleware())
 	wsrv.mount(engine)
 
 	// Hand loon the session policy through the baseline's core.Auth adapter.

@@ -62,14 +62,17 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 			w.passwords[name] = h
 		}
 	}
-	// Session cookie + current-user middleware from the baseline. epoch is 0 (the
-	// demo has no password-change invalidation); a real host returns the user's
-	// password_changed_at here so changing it logs every session out.
+	// Session + current-user middleware from the baseline — the exact prod
+	// scheme (gin-contrib/sessions "mysession" cookie, login_at expiry,
+	// password_changed_at invalidation). The demo's Meta is zero (no
+	// password-change column, no IP salt); a real host returns the user's
+	// password_changed_at here so changing it logs every session out, and sets
+	// IPHash for admin IP pinning.
 	w.auth = webauth.Auth{
-		Session: session.Manager{Secret: secret}, // 7-day default; Secure off (plain-HTTP demo)
-		Resolve: func(_ context.Context, id int64) (*core.User, int64, bool) {
+		Session: session.Config{Secret: secret}, // "mysession", 7-day default; Secure off (plain-HTTP demo)
+		Resolve: func(_ context.Context, id int64) (*core.User, webauth.Meta, bool) {
 			u := byID[id]
-			return u, 0, u != nil
+			return u, webauth.Meta{}, u != nil
 		},
 	}
 	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_crawlers.html", "admin_jobs.html", "admin_plugins.html"} {
@@ -170,12 +173,15 @@ func (w *web) loginPost(c *gin.Context) {
 		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
 		return
 	}
-	w.auth.Session.Issue(c, u.ID, 0) // epoch 0: no password-change invalidation in the demo
+	// Prod stamp: ipHash "" (no IP salt in the demo), pwChangedAt 0 (no column).
+	if err := session.Issue(c, u.ID, "", 0); err != nil {
+		w.log.Error("session issue", "err", err)
+	}
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (w *web) logout(c *gin.Context) {
-	w.auth.Session.Clear(c)
+	_ = session.Clear(c)
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
