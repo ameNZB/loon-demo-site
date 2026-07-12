@@ -17,12 +17,15 @@ news / search / groups / NZB download, an admin dashboard, and a setup wizard.
 ## Run it
 
 ```
-docker compose up -d db
-go run .
+docker compose up --build
 ```
 
 Open **http://localhost:8090/** and log in as **alice** (admin) or **bob** (user)
 — demo auth is a signed session cookie, no password.
+
+> Everything runs in Docker (Postgres + the app). The build pulls in `loon` and
+> `loon-plugins` as sibling checkouts via BuildKit named contexts, so keep them
+> checked out next to this repo. (That requirement drops once loon tags releases.)
 
 ### Index some Usenet
 

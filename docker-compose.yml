@@ -7,3 +7,21 @@ services:
       POSTGRES_DB: loon_demo
     ports:
       - "5544:5432"
+
+  app:
+    build:
+      context: .
+      # loon + loon-plugins are sibling checkouts the go.mod replaces point at;
+      # supply them to the build as named contexts (requires BuildKit, default
+      # in modern Docker). See Dockerfile.
+      additional_contexts:
+        loon: ../loon
+        loonplugins: ../loon-plugins
+    environment:
+      # talk to the db service over the compose network, not the published port
+      LOON_DEMO_DSN: "postgres://demo:demo@db:5432/loon_demo?sslmode=disable"
+    ports:
+      - "8090:8090"
+    depends_on:
+      - db
+    restart: unless-stopped
