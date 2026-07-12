@@ -172,8 +172,13 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 }
 
 func (w *web) home(c *gin.Context) {
-	// News lands with the news plugin; the empty state renders until then.
-	w.render(c, "home.html", map[string]any{"Title": "News"})
+	data := map[string]any{"Title": "Home"}
+	if w.usenet != nil {
+		if res, err := w.usenet.Browse(c.Request.Context(), "", 25); err == nil {
+			data["Recent"] = toSearchRows(res)
+		}
+	}
+	w.render(c, "home.html", data)
 }
 
 func (w *web) groups(c *gin.Context) {
@@ -188,9 +193,18 @@ func (w *web) groups(c *gin.Context) {
 
 func (w *web) search(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
-	data := map[string]any{"Title": "Search", "Query": q, "Configured": w.usenet != nil}
-	if q != "" && w.usenet != nil {
-		if res, err := w.usenet.Search(c.Request.Context(), q, 50); err == nil {
+	group := strings.TrimSpace(c.Query("group"))
+	data := map[string]any{"Title": "Search", "Query": q, "Group": group, "Configured": w.usenet != nil}
+	if w.usenet != nil {
+		var res []pluginapi.Release
+		var err error
+		switch {
+		case group != "":
+			res, err = w.usenet.Browse(c.Request.Context(), group, 100)
+		case q != "":
+			res, err = w.usenet.Search(c.Request.Context(), q, 50)
+		}
+		if err == nil {
 			data["Results"] = toSearchRows(res)
 		}
 	}

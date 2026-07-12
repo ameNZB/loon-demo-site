@@ -6,7 +6,7 @@
 </p>
 {{if .Groups}}
 <div class="group-list">
-    {{range .Groups}}<a href="/search?q={{.Name}}">{{.Name}} <span class="text-muted small">({{.NZBs}})</span></a>{{end}}
+    {{range .Groups}}<a href="/search?group={{.Name}}">{{.Name}} <span class="text-muted small">({{.NZBs}})</span></a>{{end}}
 </div>
 {{else}}
 <div class="empty">

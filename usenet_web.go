@@ -56,6 +56,7 @@ func (w *web) renderUsenet(c *gin.Context, srv pluginapi.Server, gq, msg, errMsg
 	ctx := c.Request.Context()
 	groups, _ := w.usenetAdmin.AllGroups(ctx, gq, 300)
 	total, _ := w.usenetAdmin.GroupCount(ctx)
+	stats, _ := w.usenetAdmin.Stats(ctx)
 	w.render(c, "admin_usenet.html", map[string]any{
 		"Title":      "Usenet",
 		"Server":     srv,
@@ -63,6 +64,7 @@ func (w *web) renderUsenet(c *gin.Context, srv pluginapi.Server, gq, msg, errMsg
 		"GroupQuery": gq,
 		"GroupTotal": total,
 		"Shown":      len(groups),
+		"Stats":      stats,
 		"Msg":        msg,
 		"Err":        errMsg,
 	})

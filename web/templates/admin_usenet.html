@@ -12,6 +12,29 @@
 {{if .Msg}}<div class="alert" style="border-color:var(--success);color:var(--success)">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Err}}</div>{{end}}
 
+{{with .Stats}}{{if .Groups}}
+<div class="card">
+    <h2>Crawl status</h2>
+    <p class="text-muted small">{{.TotalNZBs}} NZBs built · {{.TotalStaged}} articles staged (awaiting assembly)</p>
+    <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle">
+            <thead><tr><th>Group</th><th class="text-end">NZBs</th><th class="text-end">Staged</th><th>Crawled to</th><th>Last crawl</th></tr></thead>
+            <tbody>
+            {{range .Groups}}
+                <tr>
+                    <td><code>{{.Name}}</code></td>
+                    <td class="text-end">{{.NZBs}}</td>
+                    <td class="text-end">{{.Staged}}</td>
+                    <td class="small text-muted">{{.HighWatermark}}{{if .ServerHigh}} / {{.ServerHigh}}{{end}}</td>
+                    <td class="small text-muted">{{if .LastCrawl.IsZero}}—{{else}}{{.LastCrawl.Format "2006-01-02 15:04"}}{{end}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}{{end}}
+
 <div class="card">
     <h2>NNTP server</h2>
     <form method="post" action="/admin/usenet/server">

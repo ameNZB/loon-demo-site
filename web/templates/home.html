@@ -5,16 +5,27 @@
         <a href="/groups">groups</a> or <a href="/search">search</a> for a release.</p>
 </section>
 
-<h2 class="h5 mb-3">News</h2>
-{{if .News}}
-    {{range .News}}
-    <div class="card">
-        <h2>{{.Title}}</h2>
-        <div class="text-muted small mb-2">{{.Date}}</div>
-        <p>{{.Body}}</p>
-    </div>
-    {{end}}
+<h2 class="h5 mb-3">Recent releases</h2>
+{{if .Recent}}
+<div class="table-responsive">
+    <table class="table table-dark table-striped table-sm align-middle">
+        <thead><tr><th>Title</th><th class="text-end">Size</th><th>Posted</th><th></th></tr></thead>
+        <tbody>
+        {{range .Recent}}
+            <tr>
+                <td>{{.Title}}{{range .Tags}} <span class="badge bg-secondary">{{.}}</span>{{end}}</td>
+                <td class="text-end">{{.Size}}</td>
+                <td class="small">{{.Posted}}</td>
+                <td><a class="btn btn-sm btn-outline-primary py-0" href="/nzb/{{.ID}}">NZB</a></td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
 {{else}}
-<div class="empty">No news yet. Once the <code>news</code> plugin is wired, posts land here.</div>
+<div class="empty">
+    Nothing indexed yet. An admin sets up a Usenet server in
+    <a href="/admin/usenet">Setup</a> and enables a group, then releases appear here.
+</div>
 {{end}}
 {{end}}
