@@ -21,7 +21,8 @@ docker compose up --build
 ```
 
 Open **http://localhost:8090/** and log in as **alice** (admin) or **bob** (user)
-— demo auth is a signed session cookie, no password.
+— each account's **password is the same as its username** (`alice`/`alice`,
+`bob`/`bob`).
 
 > Everything runs in Docker (Postgres + the app). The build pulls in `loon` and
 > `loon-plugins` as sibling checkouts via BuildKit named contexts, so keep them
@@ -40,8 +41,8 @@ multi-file releases into a single NZB, and parses quality tags
 
 ## What's wired
 
-- **Auth** — signed-cookie sessions + login (the `X-Demo-User` header still works
-  for `curl`).
+- **Auth** — username/password login (bcrypt-verified) over a signed session
+  cookie; the login form is the only way in.
 - **Admin** — `/admin/plugins` + `/admin/jobs` (both from loon) + the
   `/admin/usenet` setup wizard.
 - **Plugins** (from loon-plugins) — `usenet` (the indexer), `scraper`, `backups`,

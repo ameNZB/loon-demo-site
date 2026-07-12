@@ -6,9 +6,11 @@
         <form method="post" action="/login">
             <label for="username">Username</label>
             <input id="username" type="text" name="username" placeholder="alice or bob" autofocus>
+            <label for="password" style="margin-top:.75rem">Password</label>
+            <input id="password" type="password" name="password" placeholder="same as your username">
             <p class="text-muted small mt-3">
-                Demo login — no password. <code>alice</code> is an admin,
-                <code>bob</code> is a regular user.
+                Demo accounts: <code>alice</code> (admin) / <code>bob</code> (user).
+                Each password is the same as the username.
             </p>
             <button class="btn btn-primary" type="submit">Log in</button>
         </form>

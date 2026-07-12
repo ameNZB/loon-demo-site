@@ -55,11 +55,11 @@ func main() {
 
 	engine := gin.Default()
 
-	// --- Demo users + cookie-session auth. A real host wires its session
-	// store + users table here; the demo signs an HMAC cookie over two
-	// in-memory users (and still honours the X-Demo-User header for curl).
-	// The web struct (views.go) owns the templates, static assets, session
-	// cookie, and the public home/search/groups/login pages.
+	// --- Demo users + username/password login. A real host wires its session
+	// store + users table here; the demo keeps two in-memory users whose
+	// password (bcrypt-verified) equals their username, and signs an HMAC
+	// session cookie on login. The web struct (views.go) owns the templates,
+	// static assets, session cookie, and the public/login pages.
 	sessionSecret := []byte(getenvDefault("LOON_DEMO_SESSION_SECRET", "dev-insecure-demo-secret-change-me"))
 	users := map[string]*core.User{
 		"alice": {ID: 1, Username: "alice", Role: core.RoleAdmin, CreatedAt: time.Now()},
@@ -148,9 +148,7 @@ func main() {
 	// --- Admin dashboard. core.AdminHandler renders the plugin manifest;
 	// schedule.JobsAdminHandler renders the jobs/services table with manual
 	// run/pause controls. Both sit behind the same admin role gate the plugins
-	// use. NOTE: browser access needs the X-Demo-User header (a demo limitation
-	// until real sessions land) — drive it with:
-	//   curl -H "X-Demo-User: alice" http://localhost:8090/admin/jobs
+	// use — log in as an admin (alice) in the browser to reach them.
 	admin := engine.Group("/admin", wsrv.requireAtLeast(core.RoleAdmin)...)
 	admin.GET("/plugins", core.AdminHandler(rt, c))
 	admin.GET("/jobs", schedule.JobsAdminHandler(schedule.Default))
@@ -179,9 +177,8 @@ func main() {
 		}
 	}()
 	logger.Info("loon demo site up",
-		"guestbook", "http://localhost:8090/plugin/guestbook",
-		"admin_plugins", "http://localhost:8090/admin/plugins",
-		"admin_jobs", "http://localhost:8090/admin/jobs (needs header X-Demo-User: alice)")
+		"url", "http://localhost:8090/",
+		"login", "alice/alice (admin) or bob/bob")
 
 	<-ctx.Done()
 	shutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

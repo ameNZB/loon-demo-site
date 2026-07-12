@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ameNZB/loon/core"
 
@@ -24,16 +25,18 @@ import (
 var webFS embed.FS
 
 // web is the demo's host-side HTTP surface: templates, static assets,
-// cookie-session auth, and the public pages (home/search/groups/login). A real
-// host backs this with its session store + a users table; the demo signs an
-// HMAC cookie over two in-memory users. It replaces the earlier X-Demo-User
-// header hack for browsers (the header still works for curl).
+// username+password login over a signed session cookie, and the public pages. A
+// real host backs this with its session store + a users table + hashed
+// passwords; the demo keeps two in-memory users whose password is bcrypt-
+// verified — the same login path a real site uses, just with trivial creds
+// (each account's password equals its username).
 type web struct {
-	users  map[string]*core.User // by username
-	byID   map[int64]*core.User
-	secret []byte
-	log    *slog.Logger
-	tmpls  map[string]*template.Template // page name -> parsed (base + page)
+	users     map[string]*core.User // by username
+	byID      map[int64]*core.User
+	passwords map[string]string // username -> bcrypt hash (demo: hash of the username)
+	secret    []byte
+	log       *slog.Logger
+	tmpls     map[string]*template.Template // page name -> parsed (base + page)
 
 	// usenet plugin capabilities, looked up on the extension registry after Boot.
 	usenet      pluginapi.UsenetIndex
@@ -42,10 +45,16 @@ type web struct {
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 	byID := make(map[int64]*core.User, len(users))
-	for _, u := range users {
+	passwords := make(map[string]string, len(users))
+	for name, u := range users {
 		byID[u.ID] = u
+		// Demo password == username, stored bcrypt-hashed so login exercises a
+		// real hash-verify (not a plaintext compare).
+		if h, err := bcrypt.GenerateFromPassword([]byte(name), bcrypt.DefaultCost); err == nil {
+			passwords[name] = string(h)
+		}
 	}
-	w := &web{users: users, byID: byID, secret: secret, log: log, tmpls: map[string]*template.Template{}}
+	w := &web{users: users, byID: byID, passwords: passwords, secret: secret, log: log, tmpls: map[string]*template.Template{}}
 	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
@@ -82,8 +91,8 @@ func (w *web) verify(v string) (int64, bool) {
 	return uid, true
 }
 
-// currentUser resolves the request's user from the session cookie, falling back
-// to the X-Demo-User header so the curl examples keep working.
+// currentUser resolves the request's user from the signed session cookie set at
+// login. The login form is the only way in — no header back door.
 func (w *web) currentUser(c *gin.Context) (*core.User, bool) {
 	if ck, err := c.Cookie(sessionCookie); err == nil && ck != "" {
 		if uid, ok := w.verify(ck); ok {
@@ -91,9 +100,6 @@ func (w *web) currentUser(c *gin.Context) (*core.User, bool) {
 				return u, true
 			}
 		}
-	}
-	if u, ok := w.users[c.GetHeader("X-Demo-User")]; ok {
-		return u, true
 	}
 	return nil, false
 }
@@ -110,7 +116,7 @@ func (w *web) requireAtLeast(min core.Role) gin.HandlersChain {
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
-				gin.H{"ok": false, "error": "log in (or set X-Demo-User: alice)"})
+				gin.H{"ok": false, "error": "log in first"})
 			return
 		}
 		if u.Role < min {
@@ -196,10 +202,11 @@ func (w *web) loginPage(c *gin.Context) {
 
 func (w *web) loginPost(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("username"))
+	pass := c.PostForm("password")
 	u, ok := w.users[name]
-	if !ok {
+	if !ok || bcrypt.CompareHashAndPassword([]byte(w.passwords[name]), []byte(pass)) != nil {
 		c.Status(http.StatusUnauthorized)
-		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Unknown user — try alice or bob."})
+		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
 		return
 	}
 	// 7-day cookie, HttpOnly. Secure=false because the demo runs on plain HTTP.
