@@ -16,7 +16,7 @@
                 <a href="/" {{if eq .Path "/"}}class="active"{{end}}>News</a>
                 <a href="/search" {{if eq .Path "/search"}}class="active"{{end}}>Search</a>
                 <a href="/groups" {{if eq .Path "/groups"}}class="active"{{end}}>Groups</a>
-                {{if .User}}<a href="/admin/usenet">Setup</a> <a href="/admin/jobs">Jobs</a>{{end}}
+                {{if .User}}<a href="/admin/usenet">Setup</a> <a href="/admin/crawlers">Crawlers</a> <a href="/admin/jobs">Jobs</a>{{end}}
             </nav>
             <div class="user">
                 {{if .User}}{{.User.Username}} · <a href="/logout">log out</a>

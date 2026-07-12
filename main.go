@@ -172,6 +172,12 @@ func main() {
 	admin.POST("/usenet/group", wsrv.adminUsenetGroup)
 	admin.POST("/usenet/crawl", wsrv.adminUsenetCrawl)
 
+	// Live crawl + backfill status (coverage bars, backfill controls).
+	admin.GET("/crawlers", wsrv.adminCrawlers)
+	admin.POST("/crawlers/crawl", wsrv.adminCrawlersCrawl)
+	admin.POST("/crawlers/backfill", wsrv.adminCrawlersBackfill)
+	admin.POST("/crawlers/reset-backfill", wsrv.adminCrawlersReset)
+
 	srv := &http.Server{Addr: ":8090", Handler: engine}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

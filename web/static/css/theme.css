@@ -104,6 +104,17 @@ details.job-group[open] > summary::before { transform: rotate(90deg); }
 .job-group-body { padding: .5rem 1rem; }
 .job-group-body .table-responsive { margin-bottom: 0; }
 
+/* coverage bar (crawler page): pending backfill / indexed / new */
+.cov-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); min-width: 120px; }
+.cov-bar span { display: block; height: 100%; }
+.cov-back { background: var(--warning); }
+.cov-have { background: var(--success); }
+.cov-new { background: var(--info); }
+.cov-skip { background: transparent; } /* backfill done: span below is past retention, not "todo" */
+.cov-unknown { background: var(--surface-2); width: 100%; }
+.cov-legend { display: flex; gap: 1.25rem; font-size: .8rem; color: var(--muted); margin: .3rem 0 .8rem; flex-wrap: wrap; }
+.cov-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+
 @media (max-width: 800px) {
     .group-list { columns: 1; }
     .nav-bar nav { gap: .6rem; }

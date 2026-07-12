@@ -56,7 +56,7 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 		}
 	}
 	w := &web{users: users, byID: byID, passwords: passwords, secret: secret, log: log, tmpls: map[string]*template.Template{}}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_crawlers.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
