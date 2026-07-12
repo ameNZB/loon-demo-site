@@ -38,10 +38,12 @@ type web struct {
 	log       *slog.Logger
 	tmpls     map[string]*template.Template // page name -> parsed (base + page)
 
-	// usenet plugin capabilities, looked up on the extension registry after Boot.
-	usenet      pluginapi.UsenetIndex
-	usenetAdmin pluginapi.UsenetAdmin
-	rt          *core.Runtime // plugin runtime, for the /admin/plugins page
+	// usenet plugin read capability, looked up on the extension registry after
+	// Boot (the plugin's ADMIN surface is no longer consumed here — the plugin
+	// renders its own admin views through loon's AdminView seam).
+	usenet   pluginapi.UsenetIndex
+	rt       *core.Runtime // plugin runtime, for the /admin/plugins page
+	adminNav []navItem     // shared admin subnav: plugin views + host pages
 }
 
 func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
@@ -75,7 +77,7 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 			return u, webauth.Meta{}, u != nil
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_usenet.html", "admin_crawlers.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "admin_view.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -109,6 +111,7 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 	u, _ := w.currentUser(c)
 	data["User"] = u
 	data["Path"] = c.Request.URL.Path
+	data["AdminNav"] = w.adminNav
 	t := w.tmpls[page]
 	if t == nil {
 		c.String(http.StatusInternalServerError, "unknown page %q", page)

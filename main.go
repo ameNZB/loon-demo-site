@@ -155,26 +155,23 @@ func main() {
 	admin.GET("/jobs", wsrv.adminJobs)
 	admin.POST("/jobs/control", wsrv.adminJobsControl)
 
-	// Wire the usenet plugin's capabilities into the pages — the plugin publishes
-	// them on the extension registry during Provision; look them up now Boot ran.
+	// Wire the usenet plugin's READ capability into the public pages — the
+	// plugin publishes it on the extension registry during Provision.
 	if v, ok := c.Lookup(pluginapi.UsenetIndexName); ok {
 		wsrv.usenet, _ = v.(pluginapi.UsenetIndex)
 	}
-	if v, ok := c.Lookup(pluginapi.UsenetAdminName); ok {
-		wsrv.usenetAdmin, _ = v.(pluginapi.UsenetAdmin)
-	}
-	admin.GET("/usenet", wsrv.adminUsenet)
-	admin.POST("/usenet/server", wsrv.adminUsenetSaveServer)
-	admin.POST("/usenet/test", wsrv.adminUsenetTest)
-	admin.POST("/usenet/fetch-groups", wsrv.adminUsenetFetch)
-	admin.POST("/usenet/group", wsrv.adminUsenetGroup)
-	admin.POST("/usenet/crawl", wsrv.adminUsenetCrawl)
 
-	// Live crawl + backfill status (coverage bars, backfill controls).
-	admin.GET("/crawlers", wsrv.adminCrawlers)
-	admin.POST("/crawlers/crawl", wsrv.adminCrawlersCrawl)
-	admin.POST("/crawlers/backfill", wsrv.adminCrawlersBackfill)
-	admin.POST("/crawlers/reset-backfill", wsrv.adminCrawlersReset)
+	// Plugin admin views: each plugin renders its own settings/status pages as
+	// fragments (loon's AdminView seam); the demo mounts them generically and
+	// wraps them in its layout. Zero plugin-specific admin code host-side.
+	wsrv.adminNav = adminNavFrom(c.AdminViews())
+	for _, v := range c.AdminViews() {
+		v := v
+		admin.GET("/p/"+v.Slug, wsrv.viewPage(v))
+		for name, fn := range v.Actions {
+			admin.POST("/p/"+v.Slug+"/"+name, wsrv.viewAction(v, fn))
+		}
+	}
 
 	srv := &http.Server{Addr: ":8090", Handler: engine}
 	go func() {

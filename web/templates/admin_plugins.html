@@ -1,9 +1,5 @@
 {{define "content"}}
-<div style="display:flex;gap:1rem;margin-bottom:1rem">
-    <a href="/admin/usenet" class="btn btn-sm btn-outline-secondary">Usenet setup</a>
-    <a href="/admin/jobs" class="btn btn-sm btn-outline-secondary">Jobs</a>
-    <a href="/admin/plugins" class="btn btn-sm btn-outline-primary">Plugins</a>
-</div>
+{{template "admin-subnav" .}}
 <h1 class="h3 mb-3">Plugins</h1>
 <p class="text-muted small mb-4">Plugins compiled into this build.</p>
 

@@ -16,7 +16,7 @@
                 <a href="/" {{if eq .Path "/"}}class="active"{{end}}>News</a>
                 <a href="/search" {{if eq .Path "/search"}}class="active"{{end}}>Search</a>
                 <a href="/groups" {{if eq .Path "/groups"}}class="active"{{end}}>Groups</a>
-                {{if .User}}<a href="/admin/usenet">Setup</a> <a href="/admin/crawlers">Crawlers</a> <a href="/admin/jobs">Jobs</a>{{end}}
+                {{if .User}}<a href="/admin/p/usenet">Setup</a> <a href="/admin/p/crawlers">Crawlers</a> <a href="/admin/jobs">Jobs</a>{{end}}
             </nav>
             <div class="user">
                 {{if .User}}{{.User.Username}} · <a href="/logout">log out</a>
@@ -32,3 +32,13 @@
     </footer>
 </body>
 </html>
+
+{{/* Shared admin subnav: plugin views (from loon's AdminView registry) + the
+     host's own pages. Rendered by every admin page for a consistent header. */}}
+{{define "admin-subnav"}}
+<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+    {{range .AdminNav}}
+    <a href="{{.Href}}" class="btn btn-sm {{if eq $.Path .Href}}btn-outline-primary{{else}}btn-outline-secondary{{end}}">{{.Label}}</a>
+    {{end}}
+</div>
+{{end}}
