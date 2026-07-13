@@ -30,6 +30,7 @@ import (
 	"github.com/ameNZB/loon/core"
 	"github.com/ameNZB/loon/schedule"
 
+	"github.com/ameNZB/loon-baseline/adminusers"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
 
@@ -203,6 +204,21 @@ func main() {
 	// Newznab / Torznab API (Sonarr/Radarr/Prowlarr consume these).
 	engine.GET("/api", wsrv.newznabAPI)
 	engine.GET("/rss", wsrv.newznabAPI)
+
+	// loon-baseline's batteries-included admin views (user management) plug
+	// into the SAME view system the plugins use — the host just registers
+	// them on the Core after Boot and wireViews mounts them at /admin/p/users.
+	// This is the reusable admin chrome a real host adopts instead of
+	// hand-rolling a users page.
+	if bviews, err := adminusers.Views(userStore, password.Hasher{}); err != nil {
+		logger.Error("adminusers.Views", "err", err)
+	} else {
+		for _, v := range bviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register admin view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
 
 	// Plugin views (loon's view system): plugins render their settings
 	// sections, admin/status pages, public pages, and widgets as fragments;
