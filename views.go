@@ -41,8 +41,9 @@ type web struct {
 	// usenet plugin read capability, looked up on the extension registry after
 	// Boot (the plugin's ADMIN surface is no longer consumed here — the plugin
 	// renders its own views through loon's view system).
-	usenet pluginapi.UsenetIndex
-	rt     *core.Runtime // plugin runtime, for the /admin/plugins page
+	usenet    pluginapi.UsenetIndex
+	usenetAPI pluginapi.UsenetNewznab // Newznab /api + /rss
+	rt        *core.Runtime           // plugin runtime, for the /admin/plugins page
 
 	// View-system lookup tables, filled by wireViews after Boot.
 	adminNav       []navItem            // admin subnav: Settings + plugin pages + host pages

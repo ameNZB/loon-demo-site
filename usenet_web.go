@@ -14,6 +14,44 @@ import (
 // The plugin's ADMIN pages (setup wizard, crawler status) are plugin-owned
 // views mounted generically in main.go — see admin_views.go.
 
+// newznabAPI is the Newznab/Torznab endpoint (/api + /rss). The plugin owns the
+// XML; the host parses the query + serves the response. Open (no apikey check) —
+// it's a demo; a real host validates apikey against its user store here.
+func (w *web) newznabAPI(c *gin.Context) {
+	if w.usenetAPI == nil {
+		c.String(http.StatusServiceUnavailable, "indexer not configured")
+		return
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	offset, _ := strconv.Atoi(c.Query("offset"))
+	res, err := w.usenetAPI.Newznab(c.Request.Context(), pluginapi.NewznabRequest{
+		Function: c.Query("t"),
+		Query:    c.Query("q"),
+		Limit:    limit,
+		Offset:   offset,
+		ID:       c.Query("id"),
+		BaseURL:  requestBaseURL(c),
+		Title:    "loon demo indexer",
+		APIKey:   c.Query("apikey"),
+	})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "api error")
+		return
+	}
+	if res.Filename != "" {
+		c.Header("Content-Disposition", `attachment; filename="`+res.Filename+`"`)
+	}
+	c.Data(http.StatusOK, res.ContentType, res.Body)
+}
+
+func requestBaseURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + c.Request.Host
+}
+
 // nzbDownload serves the decompressed .nzb bytes for a release id.
 func (w *web) nzbDownload(c *gin.Context) {
 	if w.usenet == nil {

@@ -160,6 +160,12 @@ func main() {
 	if v, ok := c.Lookup(pluginapi.UsenetIndexName); ok {
 		wsrv.usenet, _ = v.(pluginapi.UsenetIndex)
 	}
+	if v, ok := c.Lookup(pluginapi.UsenetNewznabName); ok {
+		wsrv.usenetAPI, _ = v.(pluginapi.UsenetNewznab)
+	}
+	// Newznab / Torznab API (Sonarr/Radarr/Prowlarr consume these).
+	engine.GET("/api", wsrv.newznabAPI)
+	engine.GET("/rss", wsrv.newznabAPI)
 
 	// Plugin views (loon's view system): plugins render their settings
 	// sections, admin/status pages, public pages, and widgets as fragments;
