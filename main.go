@@ -121,6 +121,10 @@ func main() {
 			Description: "How long search/tvsearch/movie/rss responses stay cached in the API tier."},
 		schedule.JobConfigVar{Key: "caps_ttl_secs", Label: "Caps cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "3600",
 			Description: "How long the caps (category tree) response stays cached — nearly static."},
+		schedule.JobConfigVar{Key: "rate_per_min", Label: "Requests per minute", Type: schedule.JobConfigInt, Default: "60",
+			Description: "Per-API-key (or IP) request cap per minute in the API tier — burst protection. 0 disables."},
+		schedule.JobConfigVar{Key: "rate_per_day", Label: "Requests per day", Type: schedule.JobConfigInt, Default: "10000",
+			Description: "Per-API-key (or IP) request cap per day in the API tier — the daily quota. 0 disables."},
 	)
 	apiSvc.MarkRemote() // its loop lives in loon-api; here it's a config stub
 	seedDemoUsers(userStore, logger)
