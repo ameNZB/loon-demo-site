@@ -39,6 +39,7 @@ import (
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
+	"github.com/ameNZB/loon-baseline/notify"
 	"github.com/ameNZB/loon-baseline/profile"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
@@ -147,6 +148,22 @@ func main() {
 	pointsSvc := core.NewPoints(points.adapter())
 	wsrv.points = pointsSvc // navbar balance readout
 
+	// Notification fan-out (loon-baseline): core's single NotifyFn becomes a HOOK
+	// point — every registered Sink gets each notification (the bell/inbox store,
+	// a logger, and any channel a plugin adds by looking up the fanout capability).
+	inbox := notify.NewPGStore(db.DB)
+	if err := inbox.Migrate(context.Background()); err != nil {
+		logger.Error("notify migrate", "err", err)
+		os.Exit(1)
+	}
+	notifications := notify.NewFanout(
+		notify.InboxSink(inbox),
+		notify.LogSink(func(userID int64, n core.Notification) {
+			logger.Info("notification", "to", userID, "kind", n.Kind, "title", n.Title)
+		}),
+	)
+	wsrv.inbox = inbox // navbar unread-count bell
+
 	// The scheduler is loon's batteries-included one: jobs land in
 	// schedule.Default (a host admin page would render its
 	// GetAllSnapshots), and LogSink mirrors job log lines to stdout
@@ -170,12 +187,7 @@ func main() {
 		Config: core.NewConfig(map[string]any{
 			"guestbook": map[string]any{"points_per_entry": 5},
 		}),
-		Notifications: core.NewNotifications(core.NotificationsAdapter{
-			NotifyFn: func(_ context.Context, userID int64, n core.Notification) error {
-				logger.Info("notification", "to", userID, "kind", n.Kind, "title", n.Title, "body", n.Body)
-				return nil
-			},
-		}),
+		Notifications: core.NewNotifications(core.NotificationsAdapter{NotifyFn: notifications.Deliver}),
 		Points:     pointsSvc,
 		HTTPClient: core.NewHTTPClient(),
 		Errors:     core.NewErrorReporter(core.ErrorAdapter{}), // stderr fallback
@@ -212,6 +224,11 @@ func main() {
 	// disabled verifier means plugins gate nothing (graceful).
 	if err := c.Register("captcha", wsrv.captcha); err != nil {
 		logger.Error("register captcha capability", "err", err)
+	}
+	// Publish the notification fan-out so a plugin can Add its own delivery
+	// channel (Lookup "notify.fanout" + Add a sink) during Provision.
+	if err := c.Register("notify.fanout", notifications); err != nil {
+		logger.Error("register notify.fanout capability", "err", err)
 	}
 	// Scraper enrichment: persist entries + link covers via the catalog plugin
 	// (resolved lazily after Boot), fed release candidates from the usenet index.
@@ -319,6 +336,16 @@ func main() {
 		for _, v := range pviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register profile view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// Notification inbox page (/p/inbox). The navbar bell reads UnreadCount.
+	if nviews, err := notify.InboxViews(inbox, wsrv.currentUser); err != nil {
+		logger.Error("notify.InboxViews", "err", err)
+	} else {
+		for _, v := range nviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register inbox view", "slug", v.Slug, "err", err)
 			}
 		}
 	}

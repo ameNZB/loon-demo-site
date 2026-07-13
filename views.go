@@ -21,6 +21,7 @@ import (
 	"github.com/ameNZB/loon-baseline/cache"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
+	"github.com/ameNZB/loon-baseline/notify"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/session"
 	"github.com/ameNZB/loon-baseline/users"
@@ -47,6 +48,7 @@ type web struct {
 	loginLog loginlog.Store     // login-attempt audit (recorded here, viewed via its views)
 	captcha  *captcha.Verifier  // Turnstile hook (disabled when no keys configured)
 	points   core.PointsService // for the navbar balance readout
+	inbox    notify.InboxStore  // for the navbar unread-count bell
 	cache    cache.Cache        // page cache (in-memory by default, redis if configured)
 	ipSalt   string             // salt for hashing client IPs before storing them
 	log      *slog.Logger
@@ -191,6 +193,11 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 		// unverified-email banner: look up the full record (core.User omits the flag)
 		if full, err := w.store.ByID(c.Request.Context(), u.ID); err == nil && full != nil {
 			data["EmailUnverified"] = full.Email != "" && !full.EmailVerified
+		}
+		if w.inbox != nil {
+			if n, err := w.inbox.UnreadCount(c.Request.Context(), u.ID); err == nil {
+				data["Unread"] = n
+			}
 		}
 	}
 	data["Path"] = c.Request.URL.Path
