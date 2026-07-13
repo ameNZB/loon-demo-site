@@ -85,7 +85,7 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 			return u, webauth.Meta{}, u != nil
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "login.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -106,6 +106,7 @@ func (w *web) mount(e *gin.Engine) {
 	e.GET("/", w.home)
 	e.GET("/groups", w.groups)
 	e.GET("/search", w.search)
+	e.GET("/release/:id", w.releasePage)
 	e.GET("/nzb/:id", w.nzbDownload)
 	e.GET("/login", w.loginPage)
 	e.POST("/login", w.loginPost)

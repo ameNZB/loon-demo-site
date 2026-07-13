@@ -24,7 +24,7 @@
         <tbody>
         {{range .Recent}}
             <tr>
-                <td>{{.Title}}{{range .Tags}} <span class="badge bg-secondary">{{.}}</span>{{end}}</td>
+                <td><a href="/release/{{.ID}}">{{.Title}}</a>{{range .Tags}} <span class="badge bg-secondary">{{.}}</span>{{end}}</td>
                 <td class="text-end">{{.Size}}</td>
                 <td class="small">{{.Posted}}</td>
                 <td><a class="btn btn-sm btn-outline-primary py-0" href="/nzb/{{.ID}}">NZB</a></td>

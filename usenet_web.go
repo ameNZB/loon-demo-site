@@ -52,6 +52,63 @@ func requestBaseURL(c *gin.Context) string {
 	return scheme + "://" + c.Request.Host
 }
 
+// releasePage renders the detail view for one release (metadata, tags, file
+// list, download button).
+func (w *web) releasePage(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "bad id")
+		return
+	}
+	if w.usenet == nil {
+		w.render(c, "release.html", map[string]any{"Title": "Release", "Missing": true})
+		return
+	}
+	d, ok, err := w.usenet.ReleaseByID(c.Request.Context(), id)
+	if err != nil || !ok {
+		c.Status(http.StatusNotFound)
+		w.render(c, "release.html", map[string]any{"Title": "Not found", "Missing": true})
+		return
+	}
+	w.render(c, "release.html", map[string]any{"Title": d.Title, "Release": toReleaseVM(d)})
+}
+
+type releaseFileVM struct {
+	Name     string
+	Size     string
+	Segments int
+}
+
+type releaseVM struct {
+	ID     int64
+	Title  string
+	Size   string
+	Posted string
+	Group  string
+	Poster string
+	Tags   []string
+	Files  []releaseFileVM
+}
+
+func toReleaseVM(d pluginapi.ReleaseDetail) releaseVM {
+	vm := releaseVM{
+		ID: d.ID, Title: d.Title, Size: humanBytes(d.Size),
+		Group: d.Group, Poster: d.Poster, Posted: "—",
+	}
+	if !d.Posted.IsZero() {
+		vm.Posted = d.Posted.Format("2006-01-02 15:04")
+	}
+	for _, t := range []string{d.Resolution, d.Source, d.Codec, d.Audio, d.Language} {
+		if t != "" {
+			vm.Tags = append(vm.Tags, t)
+		}
+	}
+	for _, f := range d.Files {
+		vm.Files = append(vm.Files, releaseFileVM{Name: f.Filename, Size: humanBytes(f.Bytes), Segments: f.Segments})
+	}
+	return vm
+}
+
 // nzbDownload serves the decompressed .nzb bytes for a release id.
 func (w *web) nzbDownload(c *gin.Context) {
 	if w.usenet == nil {

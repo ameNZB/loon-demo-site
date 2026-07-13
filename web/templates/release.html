@@ -1,0 +1,45 @@
+{{define "content"}}
+{{if .Missing}}
+<div class="empty">Release not found. <a href="/search">Back to search</a>.</div>
+{{else}}{{with .Release}}
+<div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:1rem">
+    <div style="flex:1;min-width:280px">
+        <h1 class="h3" style="margin-bottom:.4rem;word-break:break-word">{{.Title}}</h1>
+        <div>{{range .Tags}}<span class="badge bg-secondary" style="margin-right:.25rem">{{.}}</span>{{end}}</div>
+    </div>
+    <a class="btn btn-primary" href="/nzb/{{.ID}}">Download NZB</a>
+</div>
+
+<div class="card">
+    <table class="table table-dark table-sm align-middle" style="margin-bottom:0">
+        <tbody>
+            <tr><th style="width:140px">Size</th><td>{{.Size}}</td></tr>
+            <tr><th>Posted</th><td>{{.Posted}}</td></tr>
+            <tr><th>Group</th><td><a href="/search?group={{.Group}}"><code>{{.Group}}</code></a></td></tr>
+            {{if .Poster}}<tr><th>Poster</th><td class="text-muted small">{{.Poster}}</td></tr>{{end}}
+            <tr><th>Files</th><td>{{len .Files}}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{{if .Files}}
+<div class="card">
+    <h2>Files</h2>
+    <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm align-middle">
+            <thead><tr><th>Filename</th><th class="text-end">Size</th><th class="text-end">Segments</th></tr></thead>
+            <tbody>
+            {{range .Files}}
+                <tr>
+                    <td style="word-break:break-all">{{.Name}}</td>
+                    <td class="text-end">{{.Size}}</td>
+                    <td class="text-end">{{.Segments}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+{{end}}{{end}}
+{{end}}
