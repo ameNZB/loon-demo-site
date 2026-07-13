@@ -21,6 +21,10 @@ services:
     environment:
       # talk to the db service over the compose network, not the published port
       LOON_DEMO_DSN: "postgres://demo:demo@db:5432/loon_demo?sslmode=disable"
+      # Metadata-source credentials (optional — set on the host to enable a source):
+      #   TPDB_API_KEY = ThePornDB bearer token (xxx)   ANIDB_CLIENT = registered AniDB client name (anime)
+      TPDB_API_KEY: "${TPDB_API_KEY:-}"
+      ANIDB_CLIENT: "${ANIDB_CLIENT:-}"
     ports:
       - "8090:8090"
     depends_on:

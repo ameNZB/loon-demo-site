@@ -35,6 +35,8 @@ import (
 	_ "github.com/ameNZB/loon-plugins/catalog"
 	"github.com/ameNZB/loon-plugins/pluginapi"
 	"github.com/ameNZB/loon-plugins/scraper"
+	"github.com/ameNZB/loon-plugins/scraper/sources/anidb"
+	"github.com/ameNZB/loon-plugins/scraper/sources/theporndb"
 	"github.com/ameNZB/loon-plugins/stats"
 	_ "github.com/ameNZB/loon-plugins/usenet"
 
@@ -124,7 +126,18 @@ func main() {
 	// backups needs a place to put entries; stats needs a cache. The demo
 	// impls just log (or write to a temp dir), the way a real host would swap
 	// in its catalog_entry table / archive store / Redis cache.
-	if err := c.Register(catalog.RegistryExtension, catalog.NewRegistry()); err != nil {
+	// The shared catalog.Registry + its metadata sources. Sources are idle until
+	// their key/client is set via env (hook up now, test later):
+	//   TPDB_API_KEY → ThePornDB (xxx) · ANIDB_CLIENT → AniDB (anime)
+	reg := catalog.NewRegistry()
+	if src := theporndb.New(os.Getenv("TPDB_API_KEY"), ""); src != nil {
+		_ = reg.RegisterSource(src)
+	}
+	_ = reg.RegisterSource(anidb.New(os.Getenv("ANIDB_CLIENT"), nil))
+	for _, s := range reg.Sources() {
+		logger.Info("catalog source registered", "domain", s.Domain().Key, "priority", s.Domain().Priority)
+	}
+	if err := c.Register(catalog.RegistryExtension, reg); err != nil {
 		logger.Error("register catalog registry", "err", err)
 		os.Exit(1)
 	}
