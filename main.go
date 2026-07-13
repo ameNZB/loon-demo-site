@@ -32,6 +32,7 @@ import (
 
 	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
+	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
 
@@ -78,8 +79,17 @@ func main() {
 		logger.Error("users migrate", "err", err)
 		os.Exit(1)
 	}
+	// Login-attempt audit (loon-baseline): the host records each attempt at its
+	// login handler; the store + views live in the baseline.
+	loginLog := loginlog.NewPGStore(db.DB)
+	if err := loginLog.Migrate(context.Background()); err != nil {
+		logger.Error("loginlog migrate", "err", err)
+		os.Exit(1)
+	}
 	seedDemoUsers(userStore, logger)
 	wsrv := newWeb(userStore, sessionSecret, logger)
+	wsrv.loginLog = loginLog
+	wsrv.ipSalt = string(sessionSecret) // demo salt; a real host uses a dedicated ip_salt secret
 	// gin-contrib session middleware (the prod scheme) must be installed before
 	// any route that logs in or reads the user.
 	engine.Use(wsrv.auth.Session.Middleware())
@@ -229,6 +239,17 @@ func main() {
 		for _, v := range aviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register account view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline login audit views: /admin/p/login-log (all attempts) and
+	// /p/sign-ins (the current user's own history).
+	if lviews, err := loginlog.Views(loginLog, wsrv.currentUser); err != nil {
+		logger.Error("loginlog.Views", "err", err)
+	} else {
+		for _, v := range lviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register loginlog view", "slug", v.Slug, "err", err)
 			}
 		}
 	}

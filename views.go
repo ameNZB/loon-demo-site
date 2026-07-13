@@ -15,6 +15,7 @@ import (
 	"github.com/ameNZB/loon/core"
 
 	"github.com/ameNZB/loon-baseline/authflow"
+	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/session"
 	"github.com/ameNZB/loon-baseline/users"
@@ -34,11 +35,13 @@ var webFS embed.FS
 // Users live in a real Postgres table (loon-baseline users.PGStore), seeded
 // with alice/bob (password == username).
 type web struct {
-	store users.Store   // loon-baseline user store (Postgres reference impl)
-	flow  authflow.Flow // register / authenticate / change-password
-	auth  webauth.Auth
-	log   *slog.Logger
-	tmpls map[string]*template.Template // page name -> parsed (base + page)
+	store    users.Store    // loon-baseline user store (Postgres reference impl)
+	flow     authflow.Flow  // register / authenticate / change-password
+	auth     webauth.Auth
+	loginLog loginlog.Store // login-attempt audit (recorded here, viewed via its views)
+	ipSalt   string         // salt for hashing client IPs before storing them
+	log      *slog.Logger
+	tmpls    map[string]*template.Template // page name -> parsed (base + page)
 
 	// usenet plugin read capability, looked up on the extension registry after
 	// Boot (the plugin's ADMIN surface is no longer consumed here — the plugin
@@ -173,7 +176,9 @@ func (w *web) loginPage(c *gin.Context) {
 }
 
 func (w *web) loginPost(c *gin.Context) {
-	u, err := w.flow.Authenticate(c.Request.Context(), c.PostForm("username"), c.PostForm("password"))
+	name := c.PostForm("username")
+	u, err := w.flow.Authenticate(c.Request.Context(), name, c.PostForm("password"))
+	w.recordLogin(c, name, u, err == nil)
 	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
@@ -183,6 +188,33 @@ func (w *web) loginPost(c *gin.Context) {
 		w.log.Error("session issue", "err", err)
 	}
 	c.Redirect(http.StatusSeeOther, "/")
+}
+
+// recordLogin audits a login attempt (success or failure) via loon-baseline's
+// login log, hashing the client IP so no raw address is stored.
+func (w *web) recordLogin(c *gin.Context, username string, u *users.User, ok bool) {
+	if w.loginLog == nil {
+		return
+	}
+	var uid int64
+	if u != nil {
+		uid = u.ID
+	} else if username != "" {
+		// Attribute a failed attempt to the targeted account (if the username
+		// matches a real user) so it surfaces in that user's own sign-in
+		// history — the point of the view is to spot attempts on your account.
+		if existing, err := w.store.ByUsername(c.Request.Context(), username); err == nil {
+			uid = existing.ID
+		}
+	}
+	if err := w.loginLog.Record(c.Request.Context(), loginlog.Entry{
+		UserID:   uid,
+		Username: username,
+		IPHash:   loginlog.HashIP(w.ipSalt, c.ClientIP()),
+		Success:  ok,
+	}); err != nil {
+		w.log.Error("login log record", "err", err)
+	}
 }
 
 func (w *web) registerPage(c *gin.Context) {
