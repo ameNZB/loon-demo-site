@@ -258,6 +258,7 @@ func main() {
 	// scraper writes to and the release page reads.
 	if v, ok := c.Lookup(pluginapi.CatalogName); ok {
 		if cat, ok := v.(pluginapi.Catalog); ok {
+			wsrv.catalog = cat // taxonomy + names for the /browse page
 			wsrv.catalogSink, _ = cat.(pluginapi.CatalogSink)
 			wsrv.catalogCovers, _ = cat.(pluginapi.CatalogCovers)
 		}

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ type web struct {
 	// renders its own views through loon's view system).
 	usenet        pluginapi.UsenetIndex
 	usenetAPI     pluginapi.UsenetNewznab // Newznab /api + /rss
+	catalog       pluginapi.Catalog       // taxonomy + names for /browse (filled after Boot)
 	catalogSink   pluginapi.CatalogSink   // scraper write side (filled after Boot)
 	catalogCovers pluginapi.CatalogCovers // release↔cover store (filled after Boot)
 	rt            *core.Runtime           // plugin runtime, for the /admin/plugins page
@@ -91,7 +93,7 @@ func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 			return u.ToCore(), webauth.Meta{}, true
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "forgot.html", "reset.html", "profile.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "browse.html", "release.html", "login.html", "register.html", "forgot.html", "reset.html", "profile.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.New(page).Funcs(w.tmplFuncs()).ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -119,6 +121,7 @@ func (w *web) mount(e *gin.Engine) {
 	e.GET("/", w.home)
 	e.GET("/groups", w.groups)
 	e.GET("/search", w.search)
+	e.GET("/browse", w.browse)
 	e.GET("/release/:id", w.releasePage)
 	e.GET("/nzb/:id", w.nzbDownload)
 	e.GET("/login", w.loginPage)
@@ -232,6 +235,58 @@ func (w *web) groups(c *gin.Context) {
 		}
 	}
 	w.render(c, "groups.html", data)
+}
+
+// browse renders the category grid (no cat) or the release list for one
+// category (?cat=N), reusing the usenet Feed capability + the catalog taxonomy.
+func (w *web) browse(c *gin.Context) {
+	data := map[string]any{"Title": "Browse"}
+	if w.catalog == nil {
+		data["Unconfigured"] = true
+		w.render(c, "browse.html", data)
+		return
+	}
+	ctx := c.Request.Context()
+	catParam := strings.TrimSpace(c.Query("cat"))
+	if catParam == "" {
+		if cats, err := w.catalog.Enabled(ctx); err == nil {
+			data["Categories"] = cats
+		}
+		w.render(c, "browse.html", data)
+		return
+	}
+	catID, _ := strconv.Atoi(catParam)
+	data["CatID"] = catID
+	data["CatName"] = w.catalog.Name(catID)
+	if w.usenet != nil {
+		if res, total, err := w.usenet.Feed(ctx, w.expandCats(ctx, catID), 50, 0); err == nil {
+			data["Results"] = toSearchRows(res)
+			data["Total"] = total
+		}
+	}
+	w.render(c, "browse.html", data)
+}
+
+// expandCats maps a browse click to the category ids to query: a top-level
+// category expands to itself + all its subcats (Newznab parent semantics); a
+// subcategory queries only itself.
+func (w *web) expandCats(ctx context.Context, catID int) []int {
+	cats, _ := w.catalog.All(ctx)
+	for _, cat := range cats {
+		if cat.ID == catID {
+			ids := []int{cat.ID}
+			for _, s := range cat.Subcats {
+				ids = append(ids, s.ID)
+			}
+			return ids
+		}
+		for _, s := range cat.Subcats {
+			if s.ID == catID {
+				return []int{catID}
+			}
+		}
+	}
+	return []int{catID}
 }
 
 func (w *web) search(c *gin.Context) {

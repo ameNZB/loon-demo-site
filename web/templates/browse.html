@@ -1,0 +1,44 @@
+{{define "content"}}
+<h1 class="h3 mb-3">Browse{{if .CatName}} <span class="text-muted">· {{.CatName}}</span>{{end}}</h1>
+{{if .Unconfigured}}
+<div class="empty">The catalog isn't set up yet.</div>
+{{else if .CatID}}
+  <p class="mb-3"><a href="/browse">&larr; All categories</a></p>
+  {{if .Results}}
+  <div class="table-responsive">
+    <table class="table table-dark table-striped table-sm align-middle">
+      <thead><tr><th>Title</th><th>Category</th><th class="text-end">Size</th><th>Posted</th><th></th></tr></thead>
+      <tbody>
+      {{range .Results}}
+        <tr>
+          <td><a href="/release/{{.ID}}">{{.Title}}</a>{{range .Tags}} <span class="badge bg-secondary">{{.}}</span>{{end}}</td>
+          <td class="small text-muted">{{if .Category}}{{.Category}}{{else}}—{{end}}</td>
+          <td class="text-end">{{.Size}}</td>
+          <td class="small">{{.Posted}}</td>
+          <td><a class="btn btn-sm btn-outline-primary py-0" href="/nzb/{{.ID}}">NZB</a></td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted small">{{.Total}} release{{if ne .Total 1}}s{{end}} in {{.CatName}}.</p>
+  {{else}}
+  <div class="empty">No releases in {{.CatName}} yet.</div>
+  {{end}}
+{{else}}
+  {{if .Categories}}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.75rem">
+    {{range .Categories}}
+    <a class="card widget" href="/browse?cat={{.ID}}" style="text-decoration:none">
+      <div class="card-body">
+        <h5 class="card-title mb-1">{{.Name}}</h5>
+        {{if .Subcats}}<div class="small text-muted text-truncate">{{range $i, $s := .Subcats}}{{if $i}} · {{end}}{{$s.Name}}{{end}}</div>{{end}}
+      </div>
+    </a>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="empty">No categories enabled.</div>
+  {{end}}
+{{end}}
+{{end}}

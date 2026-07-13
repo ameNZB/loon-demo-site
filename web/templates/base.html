@@ -15,6 +15,7 @@
             <nav>
                 <a href="/" {{if eq .Path "/"}}class="active"{{end}}>News</a>
                 <a href="/search" {{if eq .Path "/search"}}class="active"{{end}}>Search</a>
+                <a href="/browse" {{if eq .Path "/browse"}}class="active"{{end}}>Browse</a>
                 <a href="/groups" {{if eq .Path "/groups"}}class="active"{{end}}>Groups</a>
                 {{range .SiteNav}}
                     {{if .Children}}
