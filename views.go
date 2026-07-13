@@ -178,7 +178,19 @@ func (w *web) loginPage(c *gin.Context) {
 func (w *web) loginPost(c *gin.Context) {
 	name := c.PostForm("username")
 	u, err := w.flow.Authenticate(c.Request.Context(), name, c.PostForm("password"))
-	w.recordLogin(c, name, u, err == nil)
+	// Audit the attempt via loon-baseline's standard policy (hash the IP,
+	// attribute a failed attempt to the targeted account). One call — the
+	// policy lives in loginlog, not here.
+	if w.loginLog != nil {
+		var uid int64
+		if u != nil {
+			uid = u.ID
+		}
+		if e := loginlog.Attempt(c.Request.Context(), w.loginLog, w.store.IDByName,
+			w.ipSalt, c.ClientIP(), name, uid, err == nil); e != nil {
+			w.log.Error("login log", "err", e)
+		}
+	}
 	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
@@ -188,33 +200,6 @@ func (w *web) loginPost(c *gin.Context) {
 		w.log.Error("session issue", "err", err)
 	}
 	c.Redirect(http.StatusSeeOther, "/")
-}
-
-// recordLogin audits a login attempt (success or failure) via loon-baseline's
-// login log, hashing the client IP so no raw address is stored.
-func (w *web) recordLogin(c *gin.Context, username string, u *users.User, ok bool) {
-	if w.loginLog == nil {
-		return
-	}
-	var uid int64
-	if u != nil {
-		uid = u.ID
-	} else if username != "" {
-		// Attribute a failed attempt to the targeted account (if the username
-		// matches a real user) so it surfaces in that user's own sign-in
-		// history — the point of the view is to spot attempts on your account.
-		if existing, err := w.store.ByUsername(c.Request.Context(), username); err == nil {
-			uid = existing.ID
-		}
-	}
-	if err := w.loginLog.Record(c.Request.Context(), loginlog.Entry{
-		UserID:   uid,
-		Username: username,
-		IPHash:   loginlog.HashIP(w.ipSalt, c.ClientIP()),
-		Success:  ok,
-	}); err != nil {
-		w.log.Error("login log record", "err", err)
-	}
 }
 
 func (w *web) registerPage(c *gin.Context) {
