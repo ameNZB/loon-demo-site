@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -25,14 +26,15 @@ func (w *web) newznabAPI(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	offset, _ := strconv.Atoi(c.Query("offset"))
 	res, err := w.usenetAPI.Newznab(c.Request.Context(), pluginapi.NewznabRequest{
-		Function: c.Query("t"),
-		Query:    c.Query("q"),
-		Limit:    limit,
-		Offset:   offset,
-		ID:       c.Query("id"),
-		BaseURL:  requestBaseURL(c),
-		Title:    "loon demo indexer",
-		APIKey:   c.Query("apikey"),
+		Function:   c.Query("t"),
+		Query:      c.Query("q"),
+		Categories: parseCats(c.Query("cat")),
+		Limit:      limit,
+		Offset:     offset,
+		ID:         c.Query("id"),
+		BaseURL:    requestBaseURL(c),
+		Title:      "loon demo indexer",
+		APIKey:     c.Query("apikey"),
 	})
 	if err != nil {
 		c.String(http.StatusInternalServerError, "api error")
@@ -50,6 +52,20 @@ func requestBaseURL(c *gin.Context) string {
 		scheme = "https"
 	}
 	return scheme + "://" + c.Request.Host
+}
+
+// parseCats splits a Newznab cat= value ("5070,2040") into category ids.
+func parseCats(s string) []int {
+	if s == "" {
+		return nil
+	}
+	var out []int
+	for _, part := range strings.Split(s, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && n > 0 {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // releasePage renders the detail view for one release (metadata, tags, file
@@ -80,20 +96,21 @@ type releaseFileVM struct {
 }
 
 type releaseVM struct {
-	ID     int64
-	Title  string
-	Size   string
-	Posted string
-	Group  string
-	Poster string
-	Tags   []string
-	Files  []releaseFileVM
+	ID       int64
+	Title    string
+	Size     string
+	Posted   string
+	Group    string
+	Poster   string
+	Category string
+	Tags     []string
+	Files    []releaseFileVM
 }
 
 func toReleaseVM(d pluginapi.ReleaseDetail) releaseVM {
 	vm := releaseVM{
 		ID: d.ID, Title: d.Title, Size: humanBytes(d.Size),
-		Group: d.Group, Poster: d.Poster, Posted: "—",
+		Group: d.Group, Poster: d.Poster, Category: d.Category, Posted: "—",
 	}
 	if !d.Posted.IsZero() {
 		vm.Posted = d.Posted.Format("2006-01-02 15:04")
@@ -135,17 +152,18 @@ func (w *web) nzbDownload(c *gin.Context) {
 // ── search view model ───────────────────────────────────────────────
 
 type searchRow struct {
-	ID     int64
-	Title  string
-	Size   string
-	Posted string
-	Tags   []string
+	ID       int64
+	Title    string
+	Size     string
+	Posted   string
+	Category string
+	Tags     []string
 }
 
 func toSearchRows(rs []pluginapi.Release) []searchRow {
 	out := make([]searchRow, len(rs))
 	for i, r := range rs {
-		row := searchRow{ID: r.ID, Title: r.Title, Size: humanBytes(r.Size), Posted: "—"}
+		row := searchRow{ID: r.ID, Title: r.Title, Size: humanBytes(r.Size), Posted: "—", Category: r.Category}
 		if !r.Posted.IsZero() {
 			row.Posted = r.Posted.Format("2006-01-02")
 		}
