@@ -28,6 +28,7 @@ type jobRow struct {
 	Runs        int64
 	Triggerable bool
 	Paused      bool
+	HasConfig   bool
 }
 
 func (w *web) adminJobs(c *gin.Context) {
@@ -88,7 +89,8 @@ func toJobRow(s schedule.JobSnapshot) jobRow {
 	r := jobRow{
 		Name: s.Name, Description: s.Description, Status: s.Status,
 		Runs: s.RunCount, Triggerable: s.Triggerable, Paused: s.Paused,
-		LastRun: fmtJobTime(s.LastRun), NextRun: fmtJobTime(s.NextRun), Interval: "—",
+		HasConfig: s.HasConfig,
+		LastRun:   fmtJobTime(s.LastRun), NextRun: fmtJobTime(s.NextRun), Interval: "—",
 	}
 	if s.IntervalMin > 0 {
 		r.Interval = fmt.Sprintf("%dm", s.IntervalMin)

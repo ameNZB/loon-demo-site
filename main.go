@@ -38,6 +38,7 @@ import (
 	cachememory "github.com/ameNZB/loon-baseline/cache/memory"
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
+	"github.com/ameNZB/loon-baseline/jobsettings"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/notify"
 	"github.com/ameNZB/loon-baseline/profile"
@@ -102,6 +103,26 @@ func main() {
 		logger.Error("authtoken migrate", "err", err)
 		os.Exit(1)
 	}
+	// Admin-editable job/service settings (loon-baseline). This is the
+	// persistence behind loon's schedule config vars. We register the "Search
+	// API" read tier as a REMOTE service: its run loop lives in loon-api (a
+	// separate process against this same DB), but declaring it here — with
+	// MarkRemote — surfaces its cache-TTL settings on this web admin's config
+	// page. Edit here; loon-api reads the same job_settings rows. That's the
+	// cross-process settings path from LOON-DISTRIBUTED.
+	jobSettings := jobsettings.NewPGStore(db.DB)
+	if err := jobSettings.Migrate(context.Background()); err != nil {
+		logger.Error("jobsettings migrate", "err", err)
+		os.Exit(1)
+	}
+	apiSvc := schedule.RegisterService("Search API", "Newznab/Torznab read tier (runs in loon-api)")
+	apiSvc.DeclareConfig(jobSettings,
+		schedule.JobConfigVar{Key: "cache_ttl_secs", Label: "Search cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "90",
+			Description: "How long search/tvsearch/movie/rss responses stay cached in the API tier."},
+		schedule.JobConfigVar{Key: "caps_ttl_secs", Label: "Caps cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "3600",
+			Description: "How long the caps (category tree) response stays cached — nearly static."},
+	)
+	apiSvc.MarkRemote() // its loop lives in loon-api; here it's a config stub
 	seedDemoUsers(userStore, logger)
 	wsrv := newWeb(userStore, sessionSecret, logger)
 	wsrv.loginLog = loginLog
@@ -263,6 +284,11 @@ func main() {
 	admin.GET("/plugins", wsrv.adminPlugins)
 	admin.GET("/jobs", wsrv.adminJobs)
 	admin.POST("/jobs/control", wsrv.adminJobsControl)
+	// Per-job/-service settings — loon's bundled config form (self-contained
+	// page). The demo's jobs table links here via a Config button for any job
+	// that declares settings (HasConfig).
+	admin.GET("/jobs/config", schedule.JobConfigHandler(nil))
+	admin.POST("/jobs/config", schedule.JobConfigSaveHandler(nil))
 
 	// Wire the usenet plugin's READ capability into the public pages — the
 	// plugin publishes it on the extension registry during Provision.
