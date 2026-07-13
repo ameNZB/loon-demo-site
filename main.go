@@ -49,6 +49,7 @@ import (
 	_ "github.com/ameNZB/loon-plugins/catalog"
 	_ "github.com/ameNZB/loon-plugins/dailyreward"
 	"github.com/ameNZB/loon-plugins/pluginapi"
+	_ "github.com/ameNZB/loon-plugins/pointstore"
 	"github.com/ameNZB/loon-plugins/scraper"
 	"github.com/ameNZB/loon-plugins/scraper/sources/anidb"
 	"github.com/ameNZB/loon-plugins/scraper/sources/theporndb"
