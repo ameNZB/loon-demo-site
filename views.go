@@ -15,6 +15,7 @@ import (
 	"github.com/ameNZB/loon/core"
 
 	"github.com/ameNZB/loon-baseline/authflow"
+	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/session"
@@ -38,8 +39,9 @@ type web struct {
 	store    users.Store    // loon-baseline user store (Postgres reference impl)
 	flow     authflow.Flow  // register / authenticate / change-password
 	auth     webauth.Auth
-	loginLog loginlog.Store // login-attempt audit (recorded here, viewed via its views)
-	ipSalt   string         // salt for hashing client IPs before storing them
+	loginLog loginlog.Store    // login-attempt audit (recorded here, viewed via its views)
+	captcha  *captcha.Verifier // Turnstile hook (disabled when no keys configured)
+	ipSalt   string            // salt for hashing client IPs before storing them
 	log      *slog.Logger
 	tmpls    map[string]*template.Template // page name -> parsed (base + page)
 
@@ -83,10 +85,18 @@ func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 		},
 	}
 	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
-		w.tmpls[page] = template.Must(template.ParseFS(webFS,
+		w.tmpls[page] = template.Must(template.New(page).Funcs(w.tmplFuncs()).ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
 	return w
+}
+
+// tmplFuncs exposes host helpers to templates. {{captcha}} renders the
+// Turnstile widget (empty when captcha is disabled), so any form can drop it in.
+func (w *web) tmplFuncs() template.FuncMap {
+	return template.FuncMap{
+		"captcha": func() template.HTML { return w.captcha.Widget() },
+	}
 }
 
 // currentUser resolves the request's user via the baseline session middleware.
@@ -176,6 +186,13 @@ func (w *web) loginPage(c *gin.Context) {
 }
 
 func (w *web) loginPost(c *gin.Context) {
+	// Captcha first — a bot shouldn't get to probe credentials. No-op when the
+	// Turnstile hook is unconfigured (demo default).
+	if err := w.captcha.Verify(c.Request.Context(), c.PostForm(captcha.FormField), c.ClientIP()); err != nil {
+		c.Status(http.StatusBadRequest)
+		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Please complete the captcha and try again."})
+		return
+	}
 	name := c.PostForm("username")
 	u, err := w.flow.Authenticate(c.Request.Context(), name, c.PostForm("password"))
 	// Audit the attempt via loon-baseline's standard policy (hash the IP,
@@ -209,6 +226,11 @@ func (w *web) registerPage(c *gin.Context) {
 func (w *web) registerPost(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("username"))
 	email := strings.TrimSpace(c.PostForm("email"))
+	if err := w.captcha.Verify(c.Request.Context(), c.PostForm(captcha.FormField), c.ClientIP()); err != nil {
+		c.Status(http.StatusBadRequest)
+		w.render(c, "register.html", map[string]any{"Title": "Register", "Error": "Please complete the captcha and try again.", "Username": name, "Email": email})
+		return
+	}
 	u, err := w.flow.Register(c.Request.Context(), name, email, c.PostForm("password"))
 	if err != nil {
 		c.Status(http.StatusBadRequest)

@@ -32,6 +32,7 @@ import (
 
 	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
+	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
@@ -90,6 +91,13 @@ func main() {
 	wsrv := newWeb(userStore, sessionSecret, logger)
 	wsrv.loginLog = loginLog
 	wsrv.ipSalt = string(sessionSecret) // demo salt; a real host uses a dedicated ip_salt secret
+	// Cloudflare Turnstile hook (loon-baseline). Disabled unless both keys are
+	// set, so the demo runs without CF; set TURNSTILE_SITEKEY + TURNSTILE_SECRET
+	// (or the CF test keys) to see it gate login + register.
+	wsrv.captcha = captcha.New(captcha.Config{
+		SiteKey: os.Getenv("TURNSTILE_SITEKEY"),
+		Secret:  os.Getenv("TURNSTILE_SECRET"),
+	})
 	// gin-contrib session middleware (the prod scheme) must be installed before
 	// any route that logs in or reads the user.
 	engine.Use(wsrv.auth.Session.Middleware())

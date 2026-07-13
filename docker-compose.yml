@@ -25,6 +25,12 @@ services:
       #   TPDB_API_KEY = ThePornDB bearer token (xxx)   ANIDB_CLIENT = registered AniDB client name (anime)
       TPDB_API_KEY: "${TPDB_API_KEY:-}"
       ANIDB_CLIENT: "${ANIDB_CLIENT:-}"
+      # Cloudflare Turnstile (optional). Unset = captcha disabled. Cloudflare's
+      # public test keys are handy here: sitekey 1x00000000000000000000AA +
+      # secret 1x0000000000000000000000000000000AA (always pass) or secret
+      # 2x0000000000000000000000000000000AA (always fail).
+      TURNSTILE_SITEKEY: "${TURNSTILE_SITEKEY:-}"
+      TURNSTILE_SECRET: "${TURNSTILE_SECRET:-}"
     ports:
       - "8090:8090"
     depends_on:

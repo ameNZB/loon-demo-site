@@ -4,14 +4,15 @@
     {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
     <div class="card">
         <form method="post" action="/login">
-            <label for="username">Username</label>
-            <input id="username" type="text" name="username" placeholder="alice or bob" autofocus>
+            <label for="username">Username or email</label>
+            <input id="username" type="text" name="username" placeholder="alice, bob, or your email" autofocus>
             <label for="password" style="margin-top:.75rem">Password</label>
             <input id="password" type="password" name="password" placeholder="same as your username">
             <p class="text-muted small mt-3">
                 Demo accounts: <code>alice</code> (admin) / <code>bob</code> (user).
                 Each password is the same as the username.
             </p>
+            <div style="margin:.75rem 0">{{captcha}}</div>
             <button class="btn btn-primary" type="submit">Log in</button>
             <a class="btn btn-outline-secondary" href="/register" style="margin-left:.5rem">Create account</a>
         </form>
