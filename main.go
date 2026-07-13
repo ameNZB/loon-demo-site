@@ -30,9 +30,13 @@ import (
 	"github.com/ameNZB/loon/core"
 	"github.com/ameNZB/loon/schedule"
 
+	goredis "github.com/redis/go-redis/v9"
+
 	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
 	"github.com/ameNZB/loon-baseline/authtoken"
+	cachememory "github.com/ameNZB/loon-baseline/cache/memory"
+	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
@@ -106,6 +110,16 @@ func main() {
 		SiteKey: os.Getenv("TURNSTILE_SITEKEY"),
 		Secret:  os.Getenv("TURNSTILE_SECRET"),
 	})
+	// Page cache (loon-baseline). In-memory by default so the demo needs no
+	// Redis; set REDIS_ADDR to use the shared redis impl instead — no call site
+	// changes, just the backend.
+	if addr := os.Getenv("REDIS_ADDR"); addr != "" {
+		wsrv.cache = cacheredis.New(goredis.NewClient(&goredis.Options{Addr: addr}))
+		logger.Info("cache backend", "kind", "redis", "addr", addr)
+	} else {
+		wsrv.cache = cachememory.New()
+		logger.Info("cache backend", "kind", "memory")
+	}
 	// Reset/verify flow. The demo "mailer" just logs the message (link included)
 	// so you can follow it in the logs; a real host sends via SMTP.
 	wsrv.resetFlow = authtoken.Flow{

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,6 +17,7 @@ import (
 
 	"github.com/ameNZB/loon-baseline/authflow"
 	"github.com/ameNZB/loon-baseline/authtoken"
+	"github.com/ameNZB/loon-baseline/cache"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
@@ -44,6 +46,7 @@ type web struct {
 	loginLog loginlog.Store     // login-attempt audit (recorded here, viewed via its views)
 	captcha  *captcha.Verifier  // Turnstile hook (disabled when no keys configured)
 	points   core.PointsService // for the navbar balance readout
+	cache    cache.Cache        // page cache (in-memory by default, redis if configured)
 	ipSalt   string             // salt for hashing client IPs before storing them
 	log      *slog.Logger
 	tmpls    map[string]*template.Template // page name -> parsed (base + page)
@@ -164,9 +167,19 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 func (w *web) home(c *gin.Context) {
 	data := map[string]any{"Title": "Home", "Widgets": w.homeWidgets(c)}
 	if w.usenet != nil {
-		if res, err := w.usenet.Browse(c.Request.Context(), "", 25); err == nil {
-			data["Recent"] = toSearchRows(res)
+		ctx := c.Request.Context()
+		// Cache the recent-releases list (shared across viewers) for a short TTL.
+		// Runs on the in-memory cache by default; the redis impl when configured.
+		var res []pluginapi.Release
+		hit, _ := cache.GetJSON(ctx, w.cache, "home:recent", &res)
+		if !hit {
+			if r, err := w.usenet.Browse(ctx, "", 25); err == nil {
+				res = r
+				_ = cache.SetJSON(ctx, w.cache, "home:recent", res, 30*time.Second)
+			}
 		}
+		c.Header("X-Cache", map[bool]string{true: "hit", false: "miss"}[hit])
+		data["Recent"] = toSearchRows(res)
 	}
 	w.render(c, "home.html", data)
 }

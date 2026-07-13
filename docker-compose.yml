@@ -8,6 +8,11 @@ services:
     ports:
       - "5544:5432"
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6399:6379"
+
   app:
     build:
       context: .
@@ -21,6 +26,8 @@ services:
     environment:
       # talk to the db service over the compose network, not the published port
       LOON_DEMO_DSN: "postgres://demo:demo@db:5432/loon_demo?sslmode=disable"
+      # Page cache backend. Unset -> in-memory; set -> the redis impl.
+      REDIS_ADDR: "${REDIS_ADDR-redis:6379}"
       # Metadata-source credentials (optional — set on the host to enable a source):
       #   TPDB_API_KEY = ThePornDB bearer token (xxx)   ANIDB_CLIENT = registered AniDB client name (anime)
       TPDB_API_KEY: "${TPDB_API_KEY:-}"
@@ -35,4 +42,5 @@ services:
       - "8090:8090"
     depends_on:
       - db
+      - redis
     restart: unless-stopped
