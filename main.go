@@ -30,6 +30,7 @@ import (
 	"github.com/ameNZB/loon/core"
 	"github.com/ameNZB/loon/schedule"
 
+	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
@@ -216,6 +217,18 @@ func main() {
 		for _, v := range bviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register admin view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline self-service account page (profile + change password) —
+	// same view-system path, mounted at /p/account for any logged-in user.
+	// Closes the loop on authflow.ChangePassword (logic existed; this is its UI).
+	if aviews, err := account.Views(wsrv.flow, wsrv.currentUser); err != nil {
+		logger.Error("account.Views", "err", err)
+	} else {
+		for _, v := range aviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register account view", "slug", v.Slug, "err", err)
 			}
 		}
 	}
