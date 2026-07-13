@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +29,9 @@ import (
 	"github.com/ameNZB/loon/catalog"
 	"github.com/ameNZB/loon/core"
 	"github.com/ameNZB/loon/schedule"
+
+	"github.com/ameNZB/loon-baseline/password"
+	"github.com/ameNZB/loon-baseline/users"
 
 	// Plugins register themselves Caddy-style at init time. The loon-plugins
 	// ones are named imports because the host injects their deps via SetDeps.
@@ -64,11 +68,16 @@ func main() {
 	// session cookie on login. The web struct (views.go) owns the templates,
 	// static assets, session cookie, and the public/login pages.
 	sessionSecret := []byte(getenvDefault("LOON_DEMO_SESSION_SECRET", "dev-insecure-demo-secret-change-me"))
-	users := map[string]*core.User{
-		"alice": {ID: 1, Username: "alice", Role: core.RoleAdmin, CreatedAt: time.Now()},
-		"bob":   {ID: 2, Username: "bob", Role: core.RoleUser, CreatedAt: time.Now()},
+	// User store: loon-baseline's Postgres reference impl (a real host implements
+	// users.Store over its own table). Migrate the reference table + seed the two
+	// demo accounts (password == username).
+	userStore := users.NewPGStore(db.DB)
+	if err := userStore.Migrate(context.Background()); err != nil {
+		logger.Error("users migrate", "err", err)
+		os.Exit(1)
 	}
-	wsrv := newWeb(users, sessionSecret, logger)
+	seedDemoUsers(userStore, logger)
+	wsrv := newWeb(userStore, sessionSecret, logger)
 	// gin-contrib session middleware (the prod scheme) must be installed before
 	// any route that logs in or reads the user.
 	engine.Use(wsrv.auth.Session.Middleware())
@@ -217,6 +226,33 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
 	rt.Stop(shutCtx)
+}
+
+// seedDemoUsers creates the two demo accounts (password == username) directly
+// via the store — bypassing the register flow's password-strength rule, since
+// seeding is a privileged setup step, not a user signup. Login still exercises
+// the real store; new signups still get the 8-char minimum.
+func seedDemoUsers(store users.Store, log *slog.Logger) {
+	hasher := password.Hasher{}
+	for _, s := range []struct {
+		name string
+		role core.Role
+	}{{"alice", core.RoleAdmin}, {"bob", core.RoleUser}} {
+		if _, err := store.ByUsername(context.Background(), s.name); err == nil {
+			continue // already seeded
+		} else if !errors.Is(err, users.ErrNotFound) {
+			log.Error("seed lookup", "user", s.name, "err", err)
+			continue
+		}
+		hash, err := hasher.Hash(s.name) // password == username
+		if err != nil {
+			log.Error("seed hash", "user", s.name, "err", err)
+			continue
+		}
+		if _, err := store.Create(context.Background(), &users.User{Username: s.name, PasswordHash: hash, Role: s.role}); err != nil {
+			log.Error("seed create", "user", s.name, "err", err)
+		}
+	}
 }
 
 func connect(dsn string) (*sqlx.DB, error) {

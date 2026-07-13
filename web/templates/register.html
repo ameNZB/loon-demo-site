@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="container page-narrow" style="padding-inline:0">
+    <h1 class="h3 mb-3">Create account</h1>
+    {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
+    <div class="card">
+        <form method="post" action="/register">
+            <label for="username">Username</label>
+            <input id="username" type="text" name="username" value="{{.Username}}" autofocus>
+            <label for="email" style="margin-top:.75rem">Email <span class="text-muted small">(optional)</span></label>
+            <input id="email" type="email" name="email" value="{{.Email}}">
+            <label for="password" style="margin-top:.75rem">Password</label>
+            <input id="password" type="password" name="password" placeholder="at least 8 characters">
+            <div style="margin-top:.9rem">
+                <button class="btn btn-primary" type="submit">Create account</button>
+                <a class="btn btn-outline-secondary" href="/login" style="margin-left:.5rem">Back to log in</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/ameNZB/loon/core"
 
+	"github.com/ameNZB/loon-baseline/authflow"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/session"
+	"github.com/ameNZB/loon-baseline/users"
 	"github.com/ameNZB/loon-baseline/webauth"
 
 	"github.com/ameNZB/loon-plugins/pluginapi"
@@ -24,19 +27,18 @@ import (
 var webFS embed.FS
 
 // web is the demo's host-side HTTP surface: templates, static assets,
-// username+password login, and the public pages. The auth plumbing (signed
-// session cookie, bcrypt verify, current-user middleware) comes from
-// loon-baseline — the shared host baseline loon omits by design — so the demo
-// exercises the same code a real site would. It keeps two in-memory users whose
-// password equals their username.
+// username+password login + registration, and the public pages. The whole auth
+// stack — user store, session cookie, bcrypt verify, register/login flow,
+// current-user middleware — comes from loon-baseline (the host baseline loon
+// omits by design), so the demo exercises the exact code a real site would.
+// Users live in a real Postgres table (loon-baseline users.PGStore), seeded
+// with alice/bob (password == username).
 type web struct {
-	users     map[string]*core.User // by username
-	byID      map[int64]*core.User
-	passwords map[string]string // username -> bcrypt hash (demo: hash of the username)
-	hasher    password.Hasher
-	auth      webauth.Auth
-	log       *slog.Logger
-	tmpls     map[string]*template.Template // page name -> parsed (base + page)
+	store users.Store   // loon-baseline user store (Postgres reference impl)
+	flow  authflow.Flow // register / authenticate / change-password
+	auth  webauth.Auth
+	log   *slog.Logger
+	tmpls map[string]*template.Template // page name -> parsed (base + page)
 
 	// usenet plugin read capability, looked up on the extension registry after
 	// Boot (the plugin's ADMIN surface is no longer consumed here — the plugin
@@ -56,38 +58,28 @@ type web struct {
 	siteNavEntries []siteNavEntry       // site pages, pre-sorted for the nav (built once at boot)
 }
 
-func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
-	byID := make(map[int64]*core.User, len(users))
+func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 	w := &web{
-		users:     users,
-		byID:      byID,
-		passwords: make(map[string]string, len(users)),
-		hasher:    password.Hasher{}, // bare bcrypt for the demo (no pepper)
-		log:       log,
-		tmpls:     map[string]*template.Template{},
-	}
-	for name, u := range users {
-		byID[u.ID] = u
-		// Demo password == username, stored bcrypt-hashed so login exercises a
-		// real hash-verify (not a plaintext compare).
-		if h, err := w.hasher.Hash(name); err == nil {
-			w.passwords[name] = h
-		}
+		store: store,
+		flow:  authflow.Flow{Users: store, Hasher: password.Hasher{}, DefaultRole: core.RoleUser},
+		log:   log,
+		tmpls: map[string]*template.Template{},
 	}
 	// Session + current-user middleware from the baseline — the exact prod
-	// scheme (gin-contrib/sessions "mysession" cookie, login_at expiry,
-	// password_changed_at invalidation). The demo's Meta is zero (no
-	// password-change column, no IP salt); a real host returns the user's
-	// password_changed_at here so changing it logs every session out, and sets
-	// IPHash for admin IP pinning.
+	// scheme (gin-contrib/sessions "mysession" cookie, login_at expiry). Resolve
+	// reads the user store; a richer host returns password_changed_at + IPHash
+	// for session invalidation + admin IP pinning.
 	w.auth = webauth.Auth{
 		Session: session.Config{Secret: secret}, // "mysession", 7-day default; Secure off (plain-HTTP demo)
-		Resolve: func(_ context.Context, id int64) (*core.User, webauth.Meta, bool) {
-			u := byID[id]
-			return u, webauth.Meta{}, u != nil
+		Resolve: func(ctx context.Context, id int64) (*core.User, webauth.Meta, bool) {
+			u, err := store.ByID(ctx, id)
+			if err != nil {
+				return nil, webauth.Meta{}, false
+			}
+			return u.ToCore(), webauth.Meta{}, true
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -95,7 +87,6 @@ func newWeb(users map[string]*core.User, secret []byte, log *slog.Logger) *web {
 }
 
 // currentUser resolves the request's user via the baseline session middleware.
-// The login form is the only way in — no header back door.
 func (w *web) currentUser(c *gin.Context) (*core.User, bool) {
 	return w.auth.Current(c)
 }
@@ -112,6 +103,8 @@ func (w *web) mount(e *gin.Engine) {
 	e.GET("/nzb/:id", w.nzbDownload)
 	e.GET("/login", w.loginPage)
 	e.POST("/login", w.loginPost)
+	e.GET("/register", w.registerPage)
+	e.POST("/register", w.registerPost)
 	e.GET("/logout", w.logout)
 }
 
@@ -180,16 +173,32 @@ func (w *web) loginPage(c *gin.Context) {
 }
 
 func (w *web) loginPost(c *gin.Context) {
-	name := strings.TrimSpace(c.PostForm("username"))
-	pass := c.PostForm("password")
-	u, ok := w.users[name]
-	if valid, _ := w.hasher.Verify(w.passwords[name], pass); !ok || !valid {
+	u, err := w.flow.Authenticate(c.Request.Context(), c.PostForm("username"), c.PostForm("password"))
+	if err != nil {
 		c.Status(http.StatusUnauthorized)
 		w.render(c, "login.html", map[string]any{"Title": "Log in", "Error": "Invalid username or password."})
 		return
 	}
-	// Prod stamp: ipHash "" (no IP salt in the demo), pwChangedAt 0 (no column).
-	if err := session.Issue(c, u.ID, "", 0); err != nil {
+	if err := w.flow.Issue(c, u); err != nil {
+		w.log.Error("session issue", "err", err)
+	}
+	c.Redirect(http.StatusSeeOther, "/")
+}
+
+func (w *web) registerPage(c *gin.Context) {
+	w.render(c, "register.html", map[string]any{"Title": "Register"})
+}
+
+func (w *web) registerPost(c *gin.Context) {
+	name := strings.TrimSpace(c.PostForm("username"))
+	email := strings.TrimSpace(c.PostForm("email"))
+	u, err := w.flow.Register(c.Request.Context(), name, email, c.PostForm("password"))
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		w.render(c, "register.html", map[string]any{"Title": "Register", "Error": err.Error(), "Username": name, "Email": email})
+		return
+	}
+	if err := w.flow.Issue(c, u); err != nil {
 		w.log.Error("session issue", "err", err)
 	}
 	c.Redirect(http.StatusSeeOther, "/")
@@ -200,21 +209,40 @@ func (w *web) logout(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
-// usersAdapter builds the core.UsersService backing from the in-memory map.
+// usersAdapter builds the core.UsersService backing from the user store.
 func (w *web) usersAdapter() core.UsersAdapter {
+	coreByID := func(ctx context.Context, id int64) (*core.User, error) {
+		u, err := w.store.ByID(ctx, id)
+		if errors.Is(err, users.ErrNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return u.ToCore(), nil
+	}
 	return core.UsersAdapter{
-		GetByIDFn:       func(_ context.Context, id int64) (*core.User, error) { return w.byID[id], nil },
-		GetByUsernameFn: func(_ context.Context, name string) (*core.User, error) { return w.users[name], nil },
-		DisplayNameFn: func(_ context.Context, id int64) (string, error) {
-			if u := w.byID[id]; u != nil {
+		GetByIDFn: coreByID,
+		GetByUsernameFn: func(ctx context.Context, name string) (*core.User, error) {
+			u, err := w.store.ByUsername(ctx, name)
+			if errors.Is(err, users.ErrNotFound) {
+				return nil, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			return u.ToCore(), nil
+		},
+		DisplayNameFn: func(ctx context.Context, id int64) (string, error) {
+			if u, err := coreByID(ctx, id); err == nil && u != nil {
 				return u.Username, nil
 			}
 			return "", nil
 		},
-		BulkDisplayNamesFn: func(_ context.Context, ids []int64) (map[int64]string, error) {
+		BulkDisplayNamesFn: func(ctx context.Context, ids []int64) (map[int64]string, error) {
 			out := make(map[int64]string, len(ids))
 			for _, id := range ids {
-				if u := w.byID[id]; u != nil {
+				if u, err := coreByID(ctx, id); err == nil && u != nil {
 					out[id] = u.Username
 				}
 			}
