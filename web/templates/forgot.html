@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="container page-narrow" style="padding-inline:0">
+    <h1 class="h3 mb-3">Reset password</h1>
+    {{if .Sent}}
+      <div class="alert alert-success">If an account exists for that email, a reset link has been sent. Check your inbox.</div>
+      <a class="btn btn-outline-secondary" href="/login">Back to log in</a>
+    {{else}}
+      {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
+      <div class="card">
+        <form method="post" action="/forgot">
+            <label for="email">Email</label>
+            <input id="email" type="email" name="email" placeholder="you@example.com" autofocus>
+            <div style="margin:.75rem 0">{{captcha}}</div>
+            <button class="btn btn-primary" type="submit">Send reset link</button>
+            <a class="btn btn-outline-secondary" href="/login" style="margin-left:.5rem">Back to log in</a>
+        </form>
+      </div>
+    {{end}}
+</div>
+{{end}}

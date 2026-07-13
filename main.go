@@ -32,6 +32,7 @@ import (
 
 	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
+	"github.com/ameNZB/loon-baseline/authtoken"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
@@ -88,6 +89,12 @@ func main() {
 		logger.Error("loginlog migrate", "err", err)
 		os.Exit(1)
 	}
+	// Password-reset + email-verification token store (loon-baseline).
+	tokenStore := authtoken.NewPGStore(db.DB)
+	if err := tokenStore.Migrate(context.Background()); err != nil {
+		logger.Error("authtoken migrate", "err", err)
+		os.Exit(1)
+	}
 	seedDemoUsers(userStore, logger)
 	wsrv := newWeb(userStore, sessionSecret, logger)
 	wsrv.loginLog = loginLog
@@ -99,6 +106,16 @@ func main() {
 		SiteKey: os.Getenv("TURNSTILE_SITEKEY"),
 		Secret:  os.Getenv("TURNSTILE_SECRET"),
 	})
+	// Reset/verify flow. The demo "mailer" just logs the message (link included)
+	// so you can follow it in the logs; a real host sends via SMTP.
+	wsrv.resetFlow = authtoken.Flow{
+		Tokens: tokenStore, Users: userStore, Hasher: password.Hasher{},
+		BaseURL: getenvDefault("LOON_DEMO_BASE_URL", "http://localhost:8090"),
+		Mail: func(to, subject, body string) error {
+			logger.Info("email (demo mailer)", "to", to, "subject", subject, "body", body)
+			return nil
+		},
+	}
 	// gin-contrib session middleware (the prod scheme) must be installed before
 	// any route that logs in or reads the user.
 	engine.Use(wsrv.auth.Session.Middleware())

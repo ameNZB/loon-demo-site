@@ -15,6 +15,7 @@ import (
 	"github.com/ameNZB/loon/core"
 
 	"github.com/ameNZB/loon-baseline/authflow"
+	"github.com/ameNZB/loon-baseline/authtoken"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/password"
@@ -36,9 +37,10 @@ var webFS embed.FS
 // Users live in a real Postgres table (loon-baseline users.PGStore), seeded
 // with alice/bob (password == username).
 type web struct {
-	store    users.Store    // loon-baseline user store (Postgres reference impl)
-	flow     authflow.Flow  // register / authenticate / change-password
-	auth     webauth.Auth
+	store     users.Store     // loon-baseline user store (Postgres reference impl)
+	flow      authflow.Flow   // register / authenticate / change-password
+	resetFlow authtoken.Flow  // password reset + email verification (token flows)
+	auth      webauth.Auth
 	loginLog loginlog.Store     // login-attempt audit (recorded here, viewed via its views)
 	captcha  *captcha.Verifier  // Turnstile hook (disabled when no keys configured)
 	points   core.PointsService // for the navbar balance readout
@@ -85,7 +87,7 @@ func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 			return u.ToCore(), webauth.Meta{}, true
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "forgot.html", "reset.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.New(page).Funcs(w.tmplFuncs()).ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -119,6 +121,12 @@ func (w *web) mount(e *gin.Engine) {
 	e.POST("/login", w.loginPost)
 	e.GET("/register", w.registerPage)
 	e.POST("/register", w.registerPost)
+	e.GET("/forgot", w.forgotPage)
+	e.POST("/forgot", w.forgotPost)
+	e.GET("/reset", w.resetPage)
+	e.POST("/reset", w.resetPost)
+	e.GET("/verify", w.verifyEmail)
+	e.GET("/verify/resend", w.resendVerify)
 	e.GET("/logout", w.logout)
 }
 
@@ -128,9 +136,15 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 	}
 	u, _ := w.currentUser(c)
 	data["User"] = u
-	if u != nil && w.points != nil {
-		if bal, err := w.points.Balance(c.Request.Context(), u.ID); err == nil {
-			data["Points"] = bal
+	if u != nil {
+		if w.points != nil {
+			if bal, err := w.points.Balance(c.Request.Context(), u.ID); err == nil {
+				data["Points"] = bal
+			}
+		}
+		// unverified-email banner: look up the full record (core.User omits the flag)
+		if full, err := w.store.ByID(c.Request.Context(), u.ID); err == nil && full != nil {
+			data["EmailUnverified"] = full.Email != "" && !full.EmailVerified
 		}
 	}
 	data["Path"] = c.Request.URL.Path
@@ -246,11 +260,81 @@ func (w *web) registerPost(c *gin.Context) {
 	if err := w.flow.Issue(c, u); err != nil {
 		w.log.Error("session issue", "err", err)
 	}
+	// Send the email-verification link (no-op if they left email blank).
+	if err := w.resetFlow.SendVerify(c.Request.Context(), u.ID, u.Email); err != nil {
+		w.log.Error("send verify", "err", err)
+	}
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (w *web) logout(c *gin.Context) {
 	_ = session.Clear(c)
+	c.Redirect(http.StatusSeeOther, "/")
+}
+
+// ── password reset + email verification (loon-baseline authtoken) ────
+
+func (w *web) forgotPage(c *gin.Context) {
+	w.render(c, "forgot.html", map[string]any{"Title": "Reset password"})
+}
+
+func (w *web) forgotPost(c *gin.Context) {
+	if err := w.captcha.Verify(c.Request.Context(), c.PostForm(captcha.FormField), c.ClientIP()); err != nil {
+		c.Status(http.StatusBadRequest)
+		w.render(c, "forgot.html", map[string]any{"Title": "Reset password", "Error": "Please complete the captcha."})
+		return
+	}
+	// RequestReset is deliberately silent about whether the email exists, so we
+	// always show the same confirmation.
+	if err := w.resetFlow.RequestReset(c.Request.Context(), strings.TrimSpace(c.PostForm("email"))); err != nil {
+		w.log.Error("request reset", "err", err)
+	}
+	w.render(c, "forgot.html", map[string]any{"Title": "Reset password", "Sent": true})
+}
+
+func (w *web) resetPage(c *gin.Context) {
+	w.render(c, "reset.html", map[string]any{"Title": "Set a new password", "Token": c.Query("token")})
+}
+
+func (w *web) resetPost(c *gin.Context) {
+	token := c.PostForm("token")
+	err := w.resetFlow.PerformReset(c.Request.Context(), token, c.PostForm("password"))
+	if err != nil {
+		msg := "Could not reset your password."
+		switch {
+		case errors.Is(err, authtoken.ErrWeakPassword):
+			msg = "Password must be at least 8 characters."
+		case errors.Is(err, authtoken.ErrInvalidToken):
+			msg = "This reset link is invalid or has expired."
+		}
+		c.Status(http.StatusBadRequest)
+		w.render(c, "reset.html", map[string]any{"Title": "Set a new password", "Token": token, "Error": msg})
+		return
+	}
+	w.render(c, "login.html", map[string]any{"Title": "Log in", "Notice": "Password updated. Please log in."})
+}
+
+func (w *web) verifyEmail(c *gin.Context) {
+	data := map[string]any{"Title": "Log in"}
+	if _, err := w.resetFlow.ConfirmVerify(c.Request.Context(), c.Query("token")); err != nil {
+		data["Error"] = "This verification link is invalid or has expired."
+	} else {
+		data["Notice"] = "Your email is verified. Thanks!"
+	}
+	w.render(c, "login.html", data)
+}
+
+func (w *web) resendVerify(c *gin.Context) {
+	u, ok := w.currentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	if full, err := w.store.ByID(c.Request.Context(), u.ID); err == nil && full != nil {
+		if err := w.resetFlow.SendVerify(c.Request.Context(), full.ID, full.Email); err != nil {
+			w.log.Error("resend verify", "err", err)
+		}
+	}
 	c.Redirect(http.StatusSeeOther, "/")
 }
 

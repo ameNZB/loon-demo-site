@@ -35,6 +35,7 @@
         </div>
     </header>
     <main class="container page py-4">
+        {{if .EmailUnverified}}<div class="alert" style="border-color:#c90;color:#c90;margin-bottom:1rem">Please verify your email &mdash; <a href="/verify/resend" style="color:#c90;text-decoration:underline">resend link</a>.</div>{{end}}
         {{template "content" .}}
     </main>
     <footer class="site-footer">

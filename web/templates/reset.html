@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="container page-narrow" style="padding-inline:0">
+    <h1 class="h3 mb-3">Set a new password</h1>
+    {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
+    <div class="card">
+        <form method="post" action="/reset">
+            <input type="hidden" name="token" value="{{.Token}}">
+            <label for="password">New password</label>
+            <input id="password" type="password" name="password" placeholder="at least 8 characters" autofocus>
+            <button class="btn btn-primary mt-3" type="submit">Update password</button>
+        </form>
+    </div>
+</div>
+{{end}}

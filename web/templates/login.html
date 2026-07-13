@@ -1,6 +1,7 @@
 {{define "content"}}
 <div class="container page-narrow" style="padding-inline:0">
     <h1 class="h3 mb-3">Log in</h1>
+    {{if .Notice}}<div class="alert alert-success">{{.Notice}}</div>{{end}}
     {{if .Error}}<div class="alert" style="border-color:var(--danger);color:var(--danger)">{{.Error}}</div>{{end}}
     <div class="card">
         <form method="post" action="/login">
@@ -12,6 +13,7 @@
                 Demo accounts: <code>alice</code> (admin) / <code>bob</code> (user).
                 Each password is the same as the username.
             </p>
+            <p class="small mt-2 mb-0"><a href="/forgot">Forgot password?</a></p>
             <div style="margin:.75rem 0">{{captcha}}</div>
             <button class="btn btn-primary" type="submit">Log in</button>
             <a class="btn btn-outline-secondary" href="/register" style="margin-left:.5rem">Create account</a>
