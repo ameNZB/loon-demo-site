@@ -32,6 +32,7 @@ import (
 	// Plugins register themselves Caddy-style at init time. The loon-plugins
 	// ones are named imports because the host injects their deps via SetDeps.
 	"github.com/ameNZB/loon-plugins/backups"
+	_ "github.com/ameNZB/loon-plugins/catalog"
 	"github.com/ameNZB/loon-plugins/pluginapi"
 	"github.com/ameNZB/loon-plugins/scraper"
 	"github.com/ameNZB/loon-plugins/stats"
