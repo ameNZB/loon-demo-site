@@ -141,7 +141,13 @@ func main() {
 		logger.Error("register catalog registry", "err", err)
 		os.Exit(1)
 	}
-	scraper.SetDeps(scraper.Deps{Sink: catalogLogSink{log: logger}})
+	// Scraper enrichment: persist entries + link covers via the catalog plugin
+	// (resolved lazily after Boot), fed release candidates from the usenet index.
+	scraper.SetDeps(scraper.Deps{
+		Sink:       lazySink{w: wsrv},
+		Candidates: wsrv.catalogCandidates,
+		Link:       wsrv.linkCover,
+	})
 	stats.SetDeps(stats.Deps{Cache: func(_ context.Context, s []pluginapi.Stat) error {
 		logger.Info("stats snapshot cached", "metrics", len(s))
 		return nil
@@ -176,6 +182,14 @@ func main() {
 	}
 	if v, ok := c.Lookup(pluginapi.UsenetNewznabName); ok {
 		wsrv.usenetAPI, _ = v.(pluginapi.UsenetNewznab)
+	}
+	// Catalog plugin: its service also implements the sink + cover store the
+	// scraper writes to and the release page reads.
+	if v, ok := c.Lookup(pluginapi.CatalogName); ok {
+		if cat, ok := v.(pluginapi.Catalog); ok {
+			wsrv.catalogSink, _ = cat.(pluginapi.CatalogSink)
+			wsrv.catalogCovers, _ = cat.(pluginapi.CatalogCovers)
+		}
 	}
 	// Newznab / Torznab API (Sonarr/Radarr/Prowlarr consume these).
 	engine.GET("/api", wsrv.newznabAPI)

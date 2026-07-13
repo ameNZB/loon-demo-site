@@ -86,7 +86,13 @@ func (w *web) releasePage(c *gin.Context) {
 		w.render(c, "release.html", map[string]any{"Title": "Not found", "Missing": true})
 		return
 	}
-	w.render(c, "release.html", map[string]any{"Title": d.Title, "Release": toReleaseVM(d)})
+	vm := toReleaseVM(d)
+	if w.catalogCovers != nil {
+		if url, has, _ := w.catalogCovers.ReleaseCover(c.Request.Context(), id); has {
+			vm.Cover = url
+		}
+	}
+	w.render(c, "release.html", map[string]any{"Title": d.Title, "Release": vm})
 }
 
 type releaseFileVM struct {
@@ -103,6 +109,7 @@ type releaseVM struct {
 	Group    string
 	Poster   string
 	Category string
+	Cover    string
 	Tags     []string
 	Files    []releaseFileVM
 }

@@ -3,6 +3,7 @@
 <div class="empty">Release not found. <a href="/search">Back to search</a>.</div>
 {{else}}{{with .Release}}
 <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:1rem">
+    {{if .Cover}}<img src="{{.Cover}}" alt="cover" style="width:120px;border-radius:var(--radius);flex-shrink:0" loading="lazy">{{end}}
     <div style="flex:1;min-width:280px">
         <h1 class="h3" style="margin-bottom:.4rem;word-break:break-word">{{.Title}}</h1>
         <div>{{range .Tags}}<span class="badge bg-secondary" style="margin-right:.25rem">{{.}}</span>{{end}}</div>
