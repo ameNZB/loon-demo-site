@@ -33,6 +33,7 @@ func (w *web) wireViews(c *core.Core, engine *gin.Engine, admin *gin.RouterGroup
 	w.settingsViews = c.Views(core.SlotAdminSettings)
 	w.sitePages = c.Views(core.SlotSitePage)
 	w.siteWidgets = c.Views(core.SlotSiteWidget)
+	w.userWidgets = c.Views(core.SlotUserWidget) // /u/<name> profile cards
 	w.jobsWidgets = map[string]core.View{}
 	for _, v := range c.Views(core.SlotJobsWidget) {
 		w.jobsWidgets[v.Anchor] = v

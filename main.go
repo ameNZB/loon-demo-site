@@ -39,6 +39,7 @@ import (
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/loginlog"
+	"github.com/ameNZB/loon-baseline/profile"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/users"
 
@@ -299,6 +300,23 @@ func main() {
 		for _, v := range lviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register loginlog view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline profile summary (SlotUserWidget on /u/<name>). Resolves the
+	// profile subject by id off the user store.
+	if pviews, err := profile.Views(func(ctx context.Context, id int64) (*core.User, bool) {
+		u, err := userStore.ByID(ctx, id)
+		if err != nil {
+			return nil, false
+		}
+		return u.ToCore(), true
+	}); err != nil {
+		logger.Error("profile.Views", "err", err)
+	} else {
+		for _, v := range pviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register profile view", "slug", v.Slug, "err", err)
 			}
 		}
 	}

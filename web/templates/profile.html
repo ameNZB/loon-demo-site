@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="container page" style="padding-inline:0">
+  {{if .Missing}}
+    <h1 class="h3">User not found</h1>
+    <p class="text-muted">No such user. <a href="/">Back home</a>.</p>
+  {{else}}
+    <div class="d-flex align-items-center mb-3">
+      <div>
+        <h1 class="h3 mb-0">{{.Subject.Username}}</h1>
+        {{if .Subject.Email}}<div class="text-muted small">{{.Subject.Email}}</div>{{end}}
+      </div>
+      {{if .IsSelf}}<a class="btn btn-sm btn-outline-secondary ms-auto" href="/p/account">Edit account</a>{{end}}
+    </div>
+    {{if .Widgets}}
+    <div class="widget-row">
+      {{range .Widgets}}<div class="card widget">{{.Fragment}}</div>{{end}}
+    </div>
+    {{else}}
+    <p class="text-muted">This profile has nothing to show yet.</p>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

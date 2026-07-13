@@ -65,6 +65,7 @@ type web struct {
 	settingsViews  []core.View          // sections on /admin/settings
 	sitePages      []core.View          // public-facing pages at /p/<slug>
 	siteWidgets    []core.View          // cards on the home page
+	userWidgets    []core.View          // cards on the /u/<name> profile page (user.* slot)
 	jobsWidgets    map[string]core.View // job-group name -> override widget
 	siteNavEntries []siteNavEntry       // site pages, pre-sorted for the nav (built once at boot)
 }
@@ -90,7 +91,7 @@ func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 			return u.ToCore(), webauth.Meta{}, true
 		},
 	}
-	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "forgot.html", "reset.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
+	for _, page := range []string{"home.html", "groups.html", "search.html", "release.html", "login.html", "register.html", "forgot.html", "reset.html", "profile.html", "site_page.html", "admin_view.html", "admin_settings.html", "admin_jobs.html", "admin_plugins.html"} {
 		w.tmpls[page] = template.Must(template.New(page).Funcs(w.tmplFuncs()).ParseFS(webFS,
 			"web/templates/base.html", "web/templates/"+page))
 	}
@@ -130,7 +131,46 @@ func (w *web) mount(e *gin.Engine) {
 	e.POST("/reset", w.resetPost)
 	e.GET("/verify", w.verifyEmail)
 	e.GET("/verify/resend", w.resendVerify)
+	e.GET("/u/:name", w.profilePage)
 	e.GET("/logout", w.logout)
+}
+
+// profilePage renders a user's public profile: it resolves the subject by name,
+// sets it via core.SetViewSubject, and renders every SlotUserWidget the viewer
+// may see (the baseline summary + any plugin contributions like the daily
+// streak) — the host owns zero profile content.
+func (w *web) profilePage(c *gin.Context) {
+	subject, err := w.store.ByUsername(c.Request.Context(), c.Param("name"))
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		w.render(c, "profile.html", map[string]any{"Title": "Not found", "Missing": true})
+		return
+	}
+	core.SetViewSubject(c, subject.ID)
+
+	var widgets []widgetVM
+	for _, v := range w.userWidgets {
+		if !w.canView(v, c) {
+			continue
+		}
+		frag, err := v.Render(c)
+		if err != nil {
+			w.log.Error("user widget", "slug", v.Slug, "err", err)
+			continue
+		}
+		if frag == "" {
+			continue
+		}
+		widgets = append(widgets, widgetVM{Title: v.Title, Fragment: frag})
+	}
+
+	viewer, _ := w.currentUser(c)
+	w.render(c, "profile.html", map[string]any{
+		"Title":   subject.Username,
+		"Subject": subject.ToCore(),
+		"IsSelf":  viewer != nil && viewer.ID == subject.ID,
+		"Widgets": widgets,
+	})
 }
 
 func (w *web) render(c *gin.Context, page string, data map[string]any) {
