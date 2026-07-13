@@ -135,6 +135,8 @@ func main() {
 			Description: "Per-API-key (or IP) request cap per minute in the API tier — burst protection. 0 disables."},
 		schedule.JobConfigVar{Key: "rate_per_day", Label: "Requests per day", Type: schedule.JobConfigInt, Default: "10000",
 			Description: "Per-API-key (or IP) request cap per day in the API tier — the daily quota. 0 disables."},
+		schedule.JobConfigVar{Key: "rate_contributor_mult", Label: "Contributor limit multiplier", Type: schedule.JobConfigInt, Default: "3",
+			Description: "Contributors get this multiple of the base API limits; mods/admins are exempt entirely."},
 	)
 	apiSvc.MarkRemote() // its loop lives in loon-api; here it's a config stub
 	seedDemoUsers(userStore, logger)
