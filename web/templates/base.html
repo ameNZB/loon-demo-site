@@ -29,7 +29,7 @@
                 {{if .User}}<a href="/admin/settings">Settings</a> <a href="/admin/p/crawlers">Crawlers</a> <a href="/admin/jobs">Jobs</a>{{end}}
             </nav>
             <div class="user">
-                {{if .User}}{{.User.Username}} · <a href="/logout">log out</a>
+                {{if .User}}<span title="points balance">{{.Points}} pts</span> · <a href="/p/account">{{.User.Username}}</a> · <a href="/logout">log out</a>
                 {{else}}<a href="/login">log in</a>{{end}}
             </div>
         </div>

@@ -41,6 +41,7 @@ import (
 	// ones are named imports because the host injects their deps via SetDeps.
 	"github.com/ameNZB/loon-plugins/backups"
 	_ "github.com/ameNZB/loon-plugins/catalog"
+	_ "github.com/ameNZB/loon-plugins/dailyreward"
 	"github.com/ameNZB/loon-plugins/pluginapi"
 	"github.com/ameNZB/loon-plugins/scraper"
 	"github.com/ameNZB/loon-plugins/scraper/sources/anidb"
@@ -110,6 +111,8 @@ func main() {
 	// --- In-memory points ledger. A real host writes the ledger
 	// row + balance update atomically; the demo keeps a map.
 	points := &demoPoints{balances: map[int64]int{}}
+	pointsSvc := core.NewPoints(points.adapter())
+	wsrv.points = pointsSvc // navbar balance readout
 
 	// The scheduler is loon's batteries-included one: jobs land in
 	// schedule.Default (a host admin page would render its
@@ -140,7 +143,7 @@ func main() {
 				return nil
 			},
 		}),
-		Points:     core.NewPoints(points.adapter()),
+		Points:     pointsSvc,
 		HTTPClient: core.NewHTTPClient(),
 		Errors:     core.NewErrorReporter(core.ErrorAdapter{}), // stderr fallback
 	})
@@ -169,6 +172,13 @@ func main() {
 	if err := c.Register(catalog.RegistryExtension, reg); err != nil {
 		logger.Error("register catalog registry", "err", err)
 		os.Exit(1)
+	}
+	// Publish the Turnstile verifier as a cross-cutting capability so plugins
+	// (e.g. the dailyreward claim button) can require a captcha without importing
+	// loon-baseline. Registered before Boot so plugin Provision can Lookup it; a
+	// disabled verifier means plugins gate nothing (graceful).
+	if err := c.Register("captcha", wsrv.captcha); err != nil {
+		logger.Error("register captcha capability", "err", err)
 	}
 	// Scraper enrichment: persist entries + link covers via the catalog plugin
 	// (resolved lazily after Boot), fed release candidates from the usenet index.

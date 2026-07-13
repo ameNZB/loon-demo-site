@@ -39,9 +39,10 @@ type web struct {
 	store    users.Store    // loon-baseline user store (Postgres reference impl)
 	flow     authflow.Flow  // register / authenticate / change-password
 	auth     webauth.Auth
-	loginLog loginlog.Store    // login-attempt audit (recorded here, viewed via its views)
-	captcha  *captcha.Verifier // Turnstile hook (disabled when no keys configured)
-	ipSalt   string            // salt for hashing client IPs before storing them
+	loginLog loginlog.Store     // login-attempt audit (recorded here, viewed via its views)
+	captcha  *captcha.Verifier  // Turnstile hook (disabled when no keys configured)
+	points   core.PointsService // for the navbar balance readout
+	ipSalt   string             // salt for hashing client IPs before storing them
 	log      *slog.Logger
 	tmpls    map[string]*template.Template // page name -> parsed (base + page)
 
@@ -127,6 +128,11 @@ func (w *web) render(c *gin.Context, page string, data map[string]any) {
 	}
 	u, _ := w.currentUser(c)
 	data["User"] = u
+	if u != nil && w.points != nil {
+		if bal, err := w.points.Balance(c.Request.Context(), u.ID); err == nil {
+			data["Points"] = bal
+		}
+	}
 	data["Path"] = c.Request.URL.Path
 	data["AdminNav"] = w.adminNav
 	data["SiteNav"] = w.siteNav(c) // plugin site pages the viewer may open
