@@ -34,6 +34,7 @@ import (
 
 	"github.com/ameNZB/loon-baseline/account"
 	"github.com/ameNZB/loon-baseline/adminusers"
+	"github.com/ameNZB/loon-baseline/apikey"
 	"github.com/ameNZB/loon-baseline/authtoken"
 	cachememory "github.com/ameNZB/loon-baseline/cache/memory"
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
@@ -115,6 +116,15 @@ func main() {
 		logger.Error("jobsettings migrate", "err", err)
 		os.Exit(1)
 	}
+	// Newznab API keys (loon-baseline): one per user, shown + regenerated on the
+	// self-service /p/api-key page. loon-api (against this same DB) validates the
+	// ?apikey= a client sends against this table.
+	apiKeys := apikey.NewPGStore(db.DB)
+	if err := apiKeys.Migrate(context.Background()); err != nil {
+		logger.Error("apikey migrate", "err", err)
+		os.Exit(1)
+	}
+
 	apiSvc := schedule.RegisterService("Search API", "Newznab/Torznab read tier (runs in loon-api)")
 	apiSvc.DeclareConfig(jobSettings,
 		schedule.JobConfigVar{Key: "cache_ttl_secs", Label: "Search cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "90",
@@ -338,6 +348,18 @@ func main() {
 		for _, v := range aviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register account view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline self-service API key page: /p/api-key shows the user's
+	// Newznab key (created on first visit) + a Regenerate button. loon-api
+	// validates the key against the same table.
+	if kviews, err := apikey.Views(apiKeys, wsrv.currentUser); err != nil {
+		logger.Error("apikey.Views", "err", err)
+	} else {
+		for _, v := range kviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register apikey view", "slug", v.Slug, "err", err)
 			}
 		}
 	}
