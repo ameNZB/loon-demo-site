@@ -43,6 +43,7 @@ import (
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/events"
 	"github.com/ameNZB/loon-baseline/jobsettings"
+	"github.com/ameNZB/loon-baseline/jobtrigger"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/maintenance"
 	"github.com/ameNZB/loon-baseline/notify"
@@ -146,6 +147,16 @@ func main() {
 	maint := maintenance.NewController(maintStore)
 	if err := maint.Restore(context.Background()); err != nil {
 		logger.Error("maintenance restore", "err", err)
+	}
+	// Cross-process "run now" queue (loon-baseline). This demo is the WORKER
+	// side: it drains the queue and runs the job locally. In a split deployment
+	// the WEB process installs schedule.RemoteTrigger to enqueue instead —
+	// never both in one process, or a triggerless job re-enqueues itself, so
+	// the demo (single process) only polls.
+	jobTriggers := jobtrigger.NewPGStore(db.DB)
+	if err := jobTriggers.Migrate(context.Background()); err != nil {
+		logger.Error("jobtrigger migrate", "err", err)
+		os.Exit(1)
 	}
 
 	apiSvc := schedule.RegisterService("Search API", "Newznab/Torznab read tier (runs in loon-api)")
@@ -346,6 +357,14 @@ func main() {
 	// replica reaches this one (single process here, but the pattern is the same
 	// as loon-api's settings refresh — coordinate through shared state).
 	go maint.StartRefresh(ctx, 5*time.Second)
+
+	// Drain the cross-process run-now queue: claim requests another process
+	// enqueued and run the job locally via schedule.TriggerJob.
+	go jobtrigger.StartPoller(ctx, jobTriggers, 3*time.Second, func(name string) bool {
+		ran := schedule.TriggerJob(name)
+		logger.Info("job trigger drained", "job", name, "ran", ran)
+		return ran
+	})
 
 	rt, err := core.Boot(ctx, c)
 	if err != nil {

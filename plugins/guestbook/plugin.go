@@ -75,15 +75,20 @@ func (p *Plugin) Provision(c *core.Core) error {
 }
 
 func (p *Plugin) Start(ctx context.Context) error {
-	p.core.Scheduler.RunLoop(ctx, p.job, 5*time.Second, time.Minute, func(ctx context.Context) {
-		n, err := p.count(ctx)
-		if err != nil {
-			p.job.SetError(err.Error())
-			return
-		}
-		p.job.Log("guestbook holds %d entries", n)
-	})
+	// A manual trigger so "run now" works — including a cross-process run-now
+	// drained from the jobtrigger queue by a worker (see the demo's poller).
+	p.job.SetTrigger(func() { go p.runStats(ctx) })
+	p.core.Scheduler.RunLoop(ctx, p.job, 5*time.Second, time.Minute, p.runStats)
 	return nil
+}
+
+func (p *Plugin) runStats(ctx context.Context) {
+	n, err := p.count(ctx)
+	if err != nil {
+		p.job.SetError(err.Error())
+		return
+	}
+	p.job.Log("guestbook holds %d entries", n)
 }
 
 func (p *Plugin) Stop(ctx context.Context) error { return nil }
