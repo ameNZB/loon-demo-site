@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -86,7 +87,11 @@ func newWeb(store users.Store, secret []byte, log *slog.Logger) *web {
 	// reads the user store; a richer host returns password_changed_at + IPHash
 	// for session invalidation + admin IP pinning.
 	w.auth = webauth.Auth{
-		Session: session.Config{Secret: secret}, // "mysession", 7-day default; Secure off (plain-HTTP demo)
+		// "mysession", 7-day default; Secure off (plain-HTTP demo). When
+		// REDIS_ADDR is set (the same env the page cache uses), sessions move
+		// server-side into Redis — the cookie carries only a signed id, so
+		// sessions survive a secret rotation and are revocable.
+		Session: session.Config{Secret: secret, RedisAddr: os.Getenv("REDIS_ADDR")},
 		Resolve: func(ctx context.Context, id int64) (*core.User, webauth.Meta, bool) {
 			u, err := store.ByID(ctx, id)
 			if err != nil {
