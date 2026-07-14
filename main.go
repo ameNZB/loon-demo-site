@@ -42,6 +42,7 @@ import (
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
 	"github.com/ameNZB/loon-baseline/events"
+	"github.com/ameNZB/loon-baseline/heartbeat"
 	"github.com/ameNZB/loon-baseline/jobsettings"
 	"github.com/ameNZB/loon-baseline/jobtrigger"
 	"github.com/ameNZB/loon-baseline/loginlog"
@@ -156,6 +157,14 @@ func main() {
 	jobTriggers := jobtrigger.NewPGStore(db.DB)
 	if err := jobTriggers.Migrate(context.Background()); err != nil {
 		logger.Error("jobtrigger migrate", "err", err)
+		os.Exit(1)
+	}
+	// Process presence (loon-baseline): this instance beats a heartbeat on an
+	// interval; the admin "Services online" view lists who's checked in. One
+	// "all" process here; a split deployment would show web + worker rows.
+	hbStore := heartbeat.NewPGStore(db.DB)
+	if err := hbStore.Migrate(context.Background()); err != nil {
+		logger.Error("heartbeat migrate", "err", err)
 		os.Exit(1)
 	}
 
@@ -366,6 +375,9 @@ func main() {
 		return ran
 	})
 
+	// Beat this instance's presence every 15s (kind "all" — single-process demo).
+	go heartbeat.StartReporter(ctx, hbStore, heartbeat.HostID("all"), "all", "loon-demo", 15*time.Second)
+
 	rt, err := core.Boot(ctx, c)
 	if err != nil {
 		logger.Error("core.Boot", "err", err)
@@ -433,6 +445,17 @@ func main() {
 		for _, v := range aviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register account view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline "Services online" view: /admin/p/services lists process
+	// instances that have beaten a heartbeat recently (kind, uptime, last seen).
+	if hviews, err := heartbeat.Views(hbStore); err != nil {
+		logger.Error("heartbeat.Views", "err", err)
+	} else {
+		for _, v := range hviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register services view", "slug", v.Slug, "err", err)
 			}
 		}
 	}
