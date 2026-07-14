@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temporarily unavailable</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0d1117; color:#e6edf3; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .card { max-width:32rem; padding:2.5rem; text-align:center; }
+  h1 { font-size:1.6rem; margin:0 0 .75rem; }
+  p { color:#9aa7b4; margin:.4rem 0; }
+  .spin { width:2.2rem; height:2.2rem; margin:0 auto 1.25rem; border:3px solid #30363d;
+    border-top-color:#3b82f6; border-radius:50%; animation:s 1s linear infinite; }
+  @keyframes s { to { transform:rotate(360deg); } }
+</style></head>
+<body><div class="card">
+  <div class="spin"></div>
+  <h1>Temporarily unavailable</h1>
+  <p>The site is briefly offline and will be back shortly.</p>
+  <p>This page refreshes automatically.</p>
+</div>
+<script>setTimeout(function(){ location.reload(); }, 15000);</script>
+</body></html>

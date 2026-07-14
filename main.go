@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"github.com/ameNZB/loon-baseline/events"
 	"github.com/ameNZB/loon-baseline/jobsettings"
 	"github.com/ameNZB/loon-baseline/loginlog"
+	"github.com/ameNZB/loon-baseline/maintenance"
 	"github.com/ameNZB/loon-baseline/notify"
 	"github.com/ameNZB/loon-baseline/password"
 	"github.com/ameNZB/loon-baseline/profile"
@@ -78,6 +80,12 @@ func main() {
 	}
 
 	engine := gin.Default()
+
+	// Liveness endpoint for a reverse proxy / load balancer health check.
+	// Registered before any middleware so it's always cheap and always answers —
+	// even while the site is in maintenance mode (the proxy needs a true "is the
+	// process up?" signal, independent of the app's maintenance flag).
+	engine.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
 	// --- Demo users + username/password login. A real host wires its session
 	// store + users table here; the demo keeps two in-memory users whose
@@ -125,6 +133,19 @@ func main() {
 	if err := apiKeys.Migrate(context.Background()); err != nil {
 		logger.Error("apikey migrate", "err", err)
 		os.Exit(1)
+	}
+	// Planned-maintenance mode (loon-baseline): a persisted flag + a self-
+	// contained 503 page + an admin toggle. Restore the last state on boot so a
+	// restart mid-maintenance stays in maintenance. The API tier (loon-api)
+	// deliberately does NOT install this middleware, so it stays up.
+	maintStore := maintenance.NewPGStore(db.DB)
+	if err := maintStore.Migrate(context.Background()); err != nil {
+		logger.Error("maintenance migrate", "err", err)
+		os.Exit(1)
+	}
+	maint := maintenance.NewController(maintStore)
+	if err := maint.Restore(context.Background()); err != nil {
+		logger.Error("maintenance restore", "err", err)
 	}
 
 	apiSvc := schedule.RegisterService("Search API", "Newznab/Torznab read tier (runs in loon-api)")
@@ -175,6 +196,17 @@ func main() {
 	// gin-contrib session middleware (the prod scheme) must be installed before
 	// any route that logs in or reads the user.
 	engine.Use(wsrv.auth.Session.Middleware())
+	// Maintenance gate: while ON, visitor pages get the 503 page. Bypass /admin
+	// (so the operator can toggle it off), /login+/logout (sign in first),
+	// /static, /healthz — and /api+/rss, so the Newznab API keeps serving while
+	// the web UI is down. That mirrors a real deployment where the API tier runs
+	// without this middleware; here it's one process, so the bypass stands in.
+	engine.Use(maint.Middleware(func(g *gin.Context) bool {
+		p := g.Request.URL.Path
+		return strings.HasPrefix(p, "/admin") || strings.HasPrefix(p, "/static") ||
+			strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/rss") ||
+			p == "/login" || p == "/logout" || p == "/healthz"
+	}))
 	wsrv.mount(engine)
 
 	// Hand loon the session policy through the baseline's core.Auth adapter.
@@ -310,6 +342,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Re-read the maintenance flag periodically so a toggle on another web
+	// replica reaches this one (single process here, but the pattern is the same
+	// as loon-api's settings refresh — coordinate through shared state).
+	go maint.StartRefresh(ctx, 5*time.Second)
+
 	rt, err := core.Boot(ctx, c)
 	if err != nil {
 		logger.Error("core.Boot", "err", err)
@@ -377,6 +414,17 @@ func main() {
 		for _, v := range aviews {
 			if err := c.RegisterView(v); err != nil {
 				logger.Error("register account view", "slug", v.Slug, "err", err)
+			}
+		}
+	}
+	// loon-baseline maintenance toggle: /admin/p/maintenance (begin/end). Turning
+	// it on shows the 503 page to visitors; /admin + /api stay reachable.
+	if mviews, err := maint.Views(); err != nil {
+		logger.Error("maintenance.Views", "err", err)
+	} else {
+		for _, v := range mviews {
+			if err := c.RegisterView(v); err != nil {
+				logger.Error("register maintenance view", "slug", v.Slug, "err", err)
 			}
 		}
 	}

@@ -1,0 +1,40 @@
+# Reverse proxy for a loon site — the UNPLANNED-outage front door.
+#
+# Two kinds of "down" need two mechanisms:
+#   • PLANNED maintenance — the app is up and serves its own 503 page (loon-
+#     baseline/maintenance). This proxy passes 503 through untouched.
+#   • UNPLANNED outage — the app crashed / is redeploying / timed out, so it
+#     can't serve anything. Caddy answers 502/504 itself with a static page,
+#     and self-clears the moment the origin is healthy again.
+#
+# LOON_UPSTREAM defaults to the compose service name; override it to test.
+
+:80 {
+	# Route the Newznab API to the read tier if you run it separately, so it
+	# keeps serving while the web app is down or deploying. Comment out if the
+	# web process also serves /api (the single-process demo does).
+	# @api path /api* /rss*
+	# reverse_proxy @api {$LOON_API_UPSTREAM:api:8091} {
+	# 	health_uri /healthz
+	# }
+
+	reverse_proxy {$LOON_UPSTREAM:web:8090} {
+		# Active health checks give zero-downtime deploys: drain one replica,
+		# deploy, and Caddy stops routing to it until /healthz is green again.
+		health_uri /healthz
+		health_interval 10s
+		health_timeout 5s
+	}
+
+	# handle_errors fires only on GATEWAY errors — a failed dial (502), a timeout
+	# (504), or no healthy upstream (503) — never on a response the origin
+	# actually returned. So an app that CHOSE to answer 503 (planned maintenance)
+	# passes straight through with its own page; only a genuinely-unreachable
+	# origin lands here and gets the static page. Self-clears on the next request
+	# once the origin is healthy.
+	handle_errors 502 503 504 {
+		root * /srv
+		rewrite * /maintenance.html
+		file_server
+	}
+}
