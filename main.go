@@ -36,14 +36,16 @@ import (
 	"github.com/ameNZB/loon-baseline/adminusers"
 	"github.com/ameNZB/loon-baseline/apikey"
 	"github.com/ameNZB/loon-baseline/authtoken"
+	"github.com/ameNZB/loon-baseline/cache"
 	cachememory "github.com/ameNZB/loon-baseline/cache/memory"
 	cacheredis "github.com/ameNZB/loon-baseline/cache/redis"
 	"github.com/ameNZB/loon-baseline/captcha"
+	"github.com/ameNZB/loon-baseline/events"
 	"github.com/ameNZB/loon-baseline/jobsettings"
 	"github.com/ameNZB/loon-baseline/loginlog"
 	"github.com/ameNZB/loon-baseline/notify"
-	"github.com/ameNZB/loon-baseline/profile"
 	"github.com/ameNZB/loon-baseline/password"
+	"github.com/ameNZB/loon-baseline/profile"
 	"github.com/ameNZB/loon-baseline/users"
 
 	// Plugins register themselves Caddy-style at init time. The loon-plugins
@@ -127,8 +129,8 @@ func main() {
 
 	apiSvc := schedule.RegisterService("Search API", "Newznab/Torznab read tier (runs in loon-api)")
 	apiSvc.DeclareConfig(jobSettings,
-		schedule.JobConfigVar{Key: "cache_ttl_secs", Label: "Search cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "90",
-			Description: "How long search/tvsearch/movie/rss responses stay cached in the API tier."},
+		schedule.JobConfigVar{Key: "cache_ttl_secs", Label: "Search cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "3600",
+			Description: "How long search/tvsearch/movie/rss responses stay cached in the API tier. Safe to keep long: an ingest invalidates the namespace."},
 		schedule.JobConfigVar{Key: "caps_ttl_secs", Label: "Caps cache TTL (seconds)", Type: schedule.JobConfigInt, Default: "3600",
 			Description: "How long the caps (category tree) response stays cached — nearly static."},
 		schedule.JobConfigVar{Key: "rate_per_min", Label: "Requests per minute", Type: schedule.JobConfigInt, Default: "60",
@@ -201,6 +203,25 @@ func main() {
 	)
 	wsrv.inbox = inbox // navbar unread-count bell
 
+	// Event bus (loon-baseline): a general publish/subscribe hook point,
+	// registered below as the "events" capability so plugins can EmitEvent
+	// through it. We subscribe a cache invalidator — when the usenet plugin
+	// reports newly-ingested releases, drop the API tier's search-cache
+	// namespace so it repopulates from fresh data. In this single-process demo
+	// that clears wsrv.cache; in a distributed deployment the SAME wiring in the
+	// worker clears the shared Redis the loon-api read tier populated (see
+	// LOON-DISTRIBUTED — no message bus, just shared state a subscriber touches).
+	bus := events.NewBus()
+	bus.Subscribe(pluginapi.EventIngested, func(ctx context.Context, payload any) {
+		if pd, ok := wsrv.cache.(cache.PrefixDeleter); ok {
+			if err := pd.DeletePrefix(ctx, "newznab:v1:"); err != nil {
+				logger.Warn("invalidate search cache", "err", err)
+				return
+			}
+		}
+		logger.Info("search cache invalidated on ingest", "new_releases", payload)
+	})
+
 	// The scheduler is loon's batteries-included one: jobs land in
 	// schedule.Default (a host admin page would render its
 	// GetAllSnapshots), and LogSink mirrors job log lines to stdout
@@ -225,9 +246,9 @@ func main() {
 			"guestbook": map[string]any{"points_per_entry": 5},
 		}),
 		Notifications: core.NewNotifications(core.NotificationsAdapter{NotifyFn: notifications.Deliver}),
-		Points:     pointsSvc,
-		HTTPClient: core.NewHTTPClient(),
-		Errors:     core.NewErrorReporter(core.ErrorAdapter{}), // stderr fallback
+		Points:        pointsSvc,
+		HTTPClient:    core.NewHTTPClient(),
+		Errors:        core.NewErrorReporter(core.ErrorAdapter{}), // stderr fallback
 	})
 	if err != nil {
 		logger.Error("core.New", "err", err)
@@ -266,6 +287,12 @@ func main() {
 	// channel (Lookup "notify.fanout" + Add a sink) during Provision.
 	if err := c.Register("notify.fanout", notifications); err != nil {
 		logger.Error("register notify.fanout capability", "err", err)
+	}
+	// Publish the event bus so plugins can EmitEvent through it (usenet emits
+	// EventIngested after a build). Registered before Boot, so it's present when
+	// jobs first run.
+	if err := pluginapi.RegisterEvents(c, bus); err != nil {
+		logger.Error("register events capability", "err", err)
 	}
 	// Scraper enrichment: persist entries + link covers via the catalog plugin
 	// (resolved lazily after Boot), fed release candidates from the usenet index.
