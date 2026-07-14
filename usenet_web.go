@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/ameNZB/loon-baseline/cache"
 	"github.com/ameNZB/loon-plugins/pluginapi"
 )
 
@@ -18,6 +20,12 @@ import (
 // newznabAPI is the Newznab/Torznab endpoint (/api + /rss). The plugin owns the
 // XML; the host parses the query + serves the response. Open (no apikey check) —
 // it's a demo; a real host validates apikey against its user store here.
+//
+// Responses are read through the host cache, using the SAME key + namespace as
+// the loon-api read tier (pluginapi.NewznabCacheKey) so a shared Redis is
+// hit-compatible. The events subscriber in main() clears this namespace on an
+// ingest, so entries only go stale when new releases land — which is why the TTL
+// can be long.
 func (w *web) newznabAPI(c *gin.Context) {
 	if w.usenetAPI == nil {
 		c.String(http.StatusServiceUnavailable, "indexer not configured")
@@ -25,7 +33,7 @@ func (w *web) newznabAPI(c *gin.Context) {
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	offset, _ := strconv.Atoi(c.Query("offset"))
-	res, err := w.usenetAPI.Newznab(c.Request.Context(), pluginapi.NewznabRequest{
+	req := pluginapi.NewznabRequest{
 		Function:   c.Query("t"),
 		Query:      c.Query("q"),
 		Categories: parseCats(c.Query("cat")),
@@ -35,14 +43,37 @@ func (w *web) newznabAPI(c *gin.Context) {
 		BaseURL:    requestBaseURL(c),
 		Title:      "loon demo indexer",
 		APIKey:     c.Query("apikey"),
-	})
+	}
+
+	// Cache read functions; t=get streams NZB bytes, don't hold those.
+	cacheable := w.cache != nil && req.Function != "get"
+	var key string
+	if cacheable {
+		key = pluginapi.NewznabCacheKey(req)
+		var cached pluginapi.NewznabResult
+		if ok, _ := cache.GetJSON(c.Request.Context(), w.cache, key, &cached); ok {
+			writeNewznab(c, cached, "hit")
+			return
+		}
+	}
+	res, err := w.usenetAPI.Newznab(c.Request.Context(), req)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "api error")
 		return
 	}
+	if cacheable {
+		// Long TTL is safe: an ingest invalidates the namespace, so entries stay
+		// fresh until new releases land.
+		_ = cache.SetJSON(c.Request.Context(), w.cache, key, res, time.Hour)
+	}
+	writeNewznab(c, res, "miss")
+}
+
+func writeNewznab(c *gin.Context, res pluginapi.NewznabResult, status string) {
 	if res.Filename != "" {
 		c.Header("Content-Disposition", `attachment; filename="`+res.Filename+`"`)
 	}
+	c.Header("X-Cache", status)
 	c.Data(http.StatusOK, res.ContentType, res.Body)
 }
 

@@ -214,7 +214,7 @@ func main() {
 	bus := events.NewBus()
 	bus.Subscribe(pluginapi.EventIngested, func(ctx context.Context, payload any) {
 		if pd, ok := wsrv.cache.(cache.PrefixDeleter); ok {
-			if err := pd.DeletePrefix(ctx, "newznab:v1:"); err != nil {
+			if err := pd.DeletePrefix(ctx, pluginapi.NewznabCachePrefix); err != nil {
 				logger.Warn("invalidate search cache", "err", err)
 				return
 			}
