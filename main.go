@@ -422,6 +422,13 @@ func main() {
 	engine.GET("/api", wsrv.newznabAPI)
 	engine.GET("/rss", wsrv.newznabAPI)
 
+	// sitemap.xml, from loon-baseline/sitemap. Wired AFTER the usenet lookup
+	// above: its releases Source reads through that capability, and a demo
+	// without the plugin configured simply publishes a static-only sitemap.
+	// See sitemap_web.go — the host supplies the Sources, the schedule and the
+	// routes; the package does the XML, the paging and the index.
+	wsrv.wireSitemap(engine, getenvDefault("LOON_DEMO_BASE_URL", "http://localhost:8090"))
+
 	// loon-baseline's batteries-included admin views (user management) plug
 	// into the SAME view system the plugins use — the host just registers
 	// them on the Core after Boot and wireViews mounts them at /admin/p/users.
