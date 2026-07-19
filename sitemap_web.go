@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ameNZB/loon-baseline/sitemap"
-	"github.com/ameNZB/loon-plugins/pluginapi"
-	"github.com/ameNZB/loon/schedule"
+	"github.com/the-loon-clan/loon-baseline/sitemap"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
+	"github.com/the-loon-clan/loon/schedule"
 )
 
 // Sitemap wiring: the reference example of loon-baseline/sitemap.

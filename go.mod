@@ -1,19 +1,19 @@
-module github.com/ameNZB/loon-demo-site
+module github.com/the-loon-clan/loon-demo-site
 
 go 1.26.4
 
 // loon + loon-plugins are developed as sibling checkouts; when they publish
 // with tagged releases these replaces drop for normal requires.
-replace github.com/ameNZB/loon => ../loon
+replace github.com/the-loon-clan/loon => ../loon
 
-replace github.com/ameNZB/loon-plugins => ../loon-plugins
+replace github.com/the-loon-clan/loon-plugins => ../loon-plugins
 
-replace github.com/ameNZB/loon-baseline => ../loon-baseline
+replace github.com/the-loon-clan/loon-baseline => ../loon-baseline
 
 require (
-	github.com/ameNZB/loon v0.0.0-00010101000000-000000000000
-	github.com/ameNZB/loon-baseline v0.0.0-00010101000000-000000000000
-	github.com/ameNZB/loon-plugins v0.0.0-00010101000000-000000000000
+	github.com/the-loon-clan/loon v0.0.0-00010101000000-000000000000
+	github.com/the-loon-clan/loon-baseline v0.0.0-00010101000000-000000000000
+	github.com/the-loon-clan/loon-plugins v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.9

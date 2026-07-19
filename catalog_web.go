@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/ameNZB/loon/catalog"
+	"github.com/the-loon-clan/loon/catalog"
 
-	"github.com/ameNZB/loon-plugins/scraper"
+	"github.com/the-loon-clan/loon-plugins/scraper"
 )
 
 // Host side of the scraper enrichment flow. scraper.SetDeps runs BEFORE Boot,

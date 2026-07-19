@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ameNZB/loon-baseline/cache"
-	"github.com/ameNZB/loon-plugins/pluginapi"
+	"github.com/the-loon-clan/loon-baseline/cache"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 // Public usenet surface only: NZB download + the search/browse view models.

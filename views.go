@@ -15,20 +15,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ameNZB/loon/core"
+	"github.com/the-loon-clan/loon/core"
 
-	"github.com/ameNZB/loon-baseline/authflow"
-	"github.com/ameNZB/loon-baseline/authtoken"
-	"github.com/ameNZB/loon-baseline/cache"
-	"github.com/ameNZB/loon-baseline/captcha"
-	"github.com/ameNZB/loon-baseline/loginlog"
-	"github.com/ameNZB/loon-baseline/notify"
-	"github.com/ameNZB/loon-baseline/password"
-	"github.com/ameNZB/loon-baseline/session"
-	"github.com/ameNZB/loon-baseline/users"
-	"github.com/ameNZB/loon-baseline/webauth"
+	"github.com/the-loon-clan/loon-baseline/authflow"
+	"github.com/the-loon-clan/loon-baseline/authtoken"
+	"github.com/the-loon-clan/loon-baseline/cache"
+	"github.com/the-loon-clan/loon-baseline/captcha"
+	"github.com/the-loon-clan/loon-baseline/loginlog"
+	"github.com/the-loon-clan/loon-baseline/notify"
+	"github.com/the-loon-clan/loon-baseline/password"
+	"github.com/the-loon-clan/loon-baseline/session"
+	"github.com/the-loon-clan/loon-baseline/users"
+	"github.com/the-loon-clan/loon-baseline/webauth"
 
-	"github.com/ameNZB/loon-plugins/pluginapi"
+	"github.com/the-loon-clan/loon-plugins/pluginapi"
 )
 
 //go:embed web/templates web/static

@@ -4,7 +4,7 @@
 
 <h1 align="center">loon-demo-site</h1>
 
-<p align="center">A working reference site built on the <a href="https://github.com/ameNZB/loon">loon</a> plugin framework.</p>
+<p align="center">A working reference site built on the <a href="https://github.com/The-Loon-Clan/loon">loon</a> plugin framework.</p>
 
 ---
 
@@ -12,7 +12,7 @@ A small but real site on loon: it wires every `core.Deps` seam, boots the plugin
 runtime against Postgres, and serves a browsable, dark-themed **Usenet indexer** —
 news / search / groups / NZB download, an admin dashboard, and a setup wizard.
 `main.go` is what a HOST looks like; the plugins come from
-[loon-plugins](https://github.com/ameNZB/loon-plugins).
+[loon-plugins](https://github.com/The-Loon-Clan/loon-plugins).
 
 ## Run it
 

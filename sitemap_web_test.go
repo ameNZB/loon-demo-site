@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ameNZB/loon-baseline/cache/memory"
-	"github.com/ameNZB/loon-baseline/sitemap"
+	"github.com/the-loon-clan/loon-baseline/cache/memory"
+	"github.com/the-loon-clan/loon-baseline/sitemap"
 )
 
 // Every URL the index advertises must actually resolve. An index linking a

@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ameNZB/loon/schedule"
+	"github.com/the-loon-clan/loon/schedule"
 )
 
 // The demo renders /admin/jobs and /admin/plugins in its own base layout (nav +
